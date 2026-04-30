@@ -1,4 +1,15 @@
-# VexxeFX UGC Editor — CLAUDE.md
+# ClipCut — CLAUDE.md
+
+## Git Commit Rule — MANDATORY
+After every change session, commit all modified files with a clear, descriptive message and push to origin:
+```bash
+git add <changed files>
+git commit -m "short description of what changed and why"
+git push
+```
+- One commit per logical change — don't batch unrelated edits into one commit
+- Message format: `area: what changed` (e.g. `export: rename vexxefx_ prefix to clipcut_`)
+- Always push after committing — the remote should stay in sync
 
 ## Restore Points — System
 
