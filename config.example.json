@@ -1,0 +1,12 @@
+{
+  "openrouter_key": "sk-or-...",
+  "openrouter_model": "meta-llama/llama-4-scout:free",
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "llama3",
+  "whisper_model": "base",
+  "whisper_backend": "faster-whisper",
+  "whisperx_model": "distil-large-v3",
+  "whisperx_batch_size": 16,
+  "silence_threshold": -35,
+  "silence_min_duration": 0.5
+}

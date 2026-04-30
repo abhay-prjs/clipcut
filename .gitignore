@@ -1,0 +1,40 @@
+# Secrets — never commit
+config.json
+
+# Local tool config
+.claude/
+
+# Local UI state
+ui_settings.json
+
+# MediaPipe model — download separately
+face_landmarker.task
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+*.log
+
+# pywebview browser data
+.webview_data/
+
+# Backups — large, kept local only
+_backups/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*.swo

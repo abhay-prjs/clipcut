@@ -1,0 +1,46 @@
+# Changelog
+Format: `date · file · what changed`
+
+- 2026-04-26 · js/captions/captions.js + whisper.js · gapless SRT: frame-snapping (_snapToFrame), sentence-boundary chunking (_chunkWordsByPunct), strict-mode end=next-start, integer-ms fmtTime, 50ms lead-in — fixes CapCut gaps and overlay timing
+- 2026-04-20 · js/core/history.js · _applySnapshot: stop rVFC + reset S.playing before restoring video.src so Space plays correctly after undo/redo; clear stale video handlers; add onerror/onloadedmetadata + prop panel update
+- 2026-04-12 · serve.py · vad_detect: replaced read_audio() with stdlib wave+numpy to fix torchcodec DLL crash
+- 2026-04-12 · serve.py · added load_ui_settings() / save_ui_settings() API methods (write to ui_settings.json)
+- 2026-04-12 · serve.py · create_window() wrapped in try/except for storage_path param (WebView2 compat)
+- 2026-04-12 · js/ui/settings.js · saveSettings() now also calls pywebview.api.save_ui_settings()
+- 2026-04-12 · js/ui/settings.js · loadSettings() now calls updateSettingsUI() immediately (sync), server patch delayed 800ms — fixes settings not persisting
+- 2026-04-12 · js/playback/playback.js · added if(video.seeking) return guard to _onVideoFrame + fallback — fixes oscillation/pause at cuts
+- 2026-04-12 · js/playback/playback.js · buildPlaySegments() excludes type==='highlight' from activeCuts — fixes highlight pausing playback
+- 2026-04-12 · js/playback/playback.js · getPlayheadPosition() uses sourceTimeToTimeline() instead of segment index
+- 2026-04-12 · js/detection/silence.js · buildPlaySegments() called after cuts update in analyzeAudio(), detectDeadSpaces(), RMS fallback
+- 2026-04-12 · js/detection/silence.js · runAutoMode() early-exits with toast if sourcePath missing
+- 2026-04-12 · js/captions/whisper.js · transcribe toast reads backend from #settingsBackendBadge instead of hardcoded "faster-whisper"
+- 2026-04-12 · ugc-editor-v2.html · ⚙ settings tab removed from left panel; ⚙ button added to topbar
+- 2026-04-12 · settings.js + state.js + silence.js + html · added autoMediapipe setting — MediaPipe now available in Auto mode (step 5), gated by useMediapipe toggle
+- 2026-04-12 · js/playback/playback.js · fixed playback starting from t=0 when first segment starts later — togglePlay() and frame loop both clamp to playSegments[0].start
+- 2026-04-12 · js/detection/ai.js · added 5 new AI chat actions: add_marker, delete_cut, apply_cuts, snap_gaps, set_speed; parser gains LABEL + SPEED fields; system prompt updated
+- 2026-04-12 · js/detection/ai.js · added 4 bulk actions: select_type, deselect_type, select_all, deselect_all; parser gains TYPE field
+- 2026-04-12 · js/detection/ai.js · script analysis upgraded: _lcsAlign + _buildScriptDiff pre-compute word-level diff; prompt now uses structured [ON-SCRIPT/AD-LIB/SKIPPED] blocks instead of raw SRT when both script + captions present
+- 2026-04-12 · js/detection/silence.js · added mergeCuts(threshold=0.3) — merges overlapping/adjacent same-type cuts; ⊕ Merge Cuts button added to timeline header
+- 2026-04-12 · js/captions/whisper.js · clamp caption ends to next caption start − 0.05s; last caption capped at start + wordsPerCap×1.5s — fixes captions bleeding past speech into silence
+- 2026-04-12 · _backups/ · restore_2026-04-12-b snapshot created before above changes
+- 2026-04-13 · serve.py · mediapipe_detect: dual-API support — auto-detects legacy (solutions) vs new Tasks API (>=0.10); auto-downloads face_landmarker.task on first use
+- 2026-04-13 · js/playback/playback.js · added _playPromise tracker + _playVideo()/_pauseVideo() helpers; togglePlay + rVFC loops use _pauseVideo() — fixes play/pause AbortError race
+- 2026-04-16 · js/captions/captions.js · transcript editor: renderTranscriptEditor(), updateTranscriptHighlight(), _applyWordCuts(), _onTranscriptSearch(), _txCut(), _txJump(); replaces captionList with flowing word-span paragraph
+- 2026-04-16 · js/playback/playback.js · rVFC + fallback loops call updateTranscriptHighlight(t) for real-time word highlight
+- 2026-04-16 · js/detection/silence.js · renderAllFindings() calls _applyWordCuts() to re-stamp word-cut class after every cut change
+- 2026-04-16 · editor.css · transcript editor styles: word-span states (word-active/selected/cut/search-hit), transcriptSearch, transcriptToolbar
+- 2026-04-16 · ugc-editor-v2.html · captions tab: captionList replaced by transcriptSearch + transcriptEditor; transcriptToolbar fixed div added
+- 2026-04-16 · js/main.js · init calls renderTranscriptEditor() to show empty state on load
+- 2026-04-16 · js/captions/captions.js · transcript toolbar: added _txUncut() — removes all S.cuts overlapping the text selection; saveHistory() first
+- 2026-04-16 · ugc-editor-v2.html · transcript toolbar: added ⊘ Uncut button
+- 2026-04-18 · js/detection/silence.js · detectDeadSpaces() no longer gated on captions; removed caption-overlap filter from RMS fallback — VAD now runs on raw audio only
+- 2026-04-18 · js/detection/silence.js · removed MediaPipe call block, _combineCuts(), autoMediapipe step, deepMediapipe step from runAutoMode()
+- 2026-04-18 · js/core/state.js · removed MediaPipe settings keys: useMediapipe, mpLipThreshold, mpMinSpeakingMs, mpFrameSkip, autoMediapipe, deepMediapipe
+- 2026-04-18 · js/ui/settings.js · removed MediaPipe from SETTINGS_DEFAULTS, toggleSetting, updateMPSetting(), updateSettingsUI(), _updatePipelineBtns(), _updateCombineUI()
+- 2026-04-18 · ugc-editor-v2.html · removed MediaPipe toggle, MP tuning panel, autoMediapipe checkbox, deepMediapipe checkbox from Settings tab
+- 2026-04-18 · serve.py · removed mediapipe_detect() method entirely (~155 lines)
+- 2026-04-18 · js/detection/ai.js · runAIScriptAnalysis() hard-blocks if S.captions.length === 0 — no more fake timestamp analysis
+- 2026-04-18 · js/detection/ai.js · sendChat() blocks if transcript context on and S.captions empty — prevents stale context after applyCuts
+- 2026-04-18 · js/detection/silence.js · applyCuts() now also clears S.chatHistory alongside S.captions
+- 2026-04-18 · serve.py · WHISPER_BACKEND default changed from faster-whisper to whisperx
+- 2026-04-18 · js/playback/playback.js · added _deduplicateCuts() — merges cuts overlapping >50% of shorter interval; called in buildPlaySegments() to prevent double-gaps from ffmpeg+VAD overlap

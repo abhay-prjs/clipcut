@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClipCut</title>
+<link rel="stylesheet" href="clipcut.css">
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <span class="logo">ClipCut</span>
+  <div class="dv"></div>
+  <button class="tool-btn ai-btn" onclick="openSilenceModal()">✦ AI Silence</button>
+  <button class="tool-btn ai-btn" onclick="openCaptionAI()">✦ AI Captions</button>
+  <div class="dv"></div>
+  <button id="autoModeBtn" onclick="runAutoMode(false)" class="tbtn" style="border-color:rgba(61,127,255,.35);color:var(--blue-soft);">⚡ Auto</button>
+  <button id="autoModeDeepBtn" onclick="runAutoMode(true)" class="tbtn ai">✦ Deep</button>
+  <div id="cutBadge" style="font-size:9px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(255,84,97,.15);border:1px solid rgba(255,84,97,.3);color:#ff5461;display:none">0 cuts</div>
+  <div class="dv"></div>
+  <button class="tool-btn" onclick="undo()">↺ Undo</button>
+  <button class="tool-btn" onclick="redo()">↻ Redo</button>
+  <div class="dv"></div>
+  <button class="tool-btn" onclick="addMarker()">♦ Mark</button>
+  <div class="dv"></div>
+  <button class="tool-btn danger" onclick="deleteClip()">✕ Delete</button>
+  <div class="spacer"></div>
+  <div class="config-status" id="configStatus"></div>
+  <div class="dv"></div>
+  <div class="timecode" id="timecodeDisplay">00:00:00</div>
+  <div class="dv"></div>
+  <button class="tbtn ai" onclick="toggleChatPanel()" id="chatToggleBtn">✦ AI Chat</button>
+  <button class="tbtn" onclick="switchTab('settings')" title="Detection & pipeline settings" style="font-size:14px;padding:0 10px;">⚙</button>
+  <button class="export-btn" onclick="openExportModal()">⬇ Export</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active" onclick="switchTab('media')">Media</div>
+      <div class="panel-tab" onclick="switchTab('captions')">Captions</div>
+      <div class="panel-tab" onclick="switchTab('silence')">Silence</div>
+      <div class="panel-tab" onclick="switchTab('ai')">AI</div>
+    </div>
+
+    <!-- Media -->
+    <div class="panel-content tab-content active" id="tab-media">
+      <div class="panel-section">
+        <div class="upload-zone" onclick="onUploadZoneClick()">
+          <div class="ui">📁</div>
+          <p>Drop video or <span>browse</span></p>
+          <p style="font-size:9px;margin-top:3px;">MP4 · MOV · WEBM · MKV</p>
+        </div>
+        <input type="file" id="fileInput" accept="video/*" multiple>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Library</div>
+        <div id="clipList"><div class="empty-state">No clips yet</div></div>
+      </div>
+    </div>
+
+    <!-- Captions -->
+    <div class="panel-content tab-content" id="tab-captions">
+      <div class="panel-section">
+        <div class="panel-label">Transcription</div>
+        <button class="api-key-save" style="width:100%;margin-bottom:6px" onclick="checkWhisperServer()">⚡ Load Whisper Model</button>
+        <div id="whisperStatus" style="font-size:9.5px;font-family:'JetBrains Mono',monospace;padding:5px 7px;border-radius:4px;background:var(--s2);border:1px solid var(--b1);color:var(--text2);">
+          ◌ Not loaded — click to initialize
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Caption Style</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;color:var(--text2)">Words per caption</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="act-btn" style="margin:0;width:22px;height:22px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center" onclick="S.wordsPerCap=Math.max(1,S.wordsPerCap-1);updateWPCDisplay()">−</button>
+            <span id="wpcDisplay" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--blue-soft);min-width:14px;text-align:center">2</span>
+            <button class="act-btn" style="margin:0;width:22px;height:22px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center" onclick="S.wordsPerCap=Math.min(8,S.wordsPerCap+1);updateWPCDisplay()">+</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;color:var(--text2)">Strip punctuation</span>
+          <button id="stripPunctBtn" class="act-btn primary" style="margin:0;width:auto;padding:2px 10px;font-size:9px" onclick="toggleStripPunct()">ON</button>
+        </div>
+        <button class="act-btn ai" onclick="transcribeWithWhisper()">✦ Transcribe Video</button>
+        <button class="act-btn" onclick="addManualCaption()">+ Add Manual</button>
+      </div>
+      <div class="panel-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div class="panel-label" style="margin:0">Transcript</div>
+          <button id="txSuggestBtn" class="act-btn" style="margin:0;width:auto;padding:2px 10px;font-size:9px;opacity:0.5" onclick="toggleTxSuggestions()">Show Suggestions</button>
+        </div>
+        <input type="text" id="transcriptSearch" placeholder="Search transcript…" oninput="_onTranscriptSearch(this.value)" autocomplete="off">
+        <div id="transcriptEditor"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Export Captions</div>
+        <div style="display:flex;gap:6px;">
+          <button class="act-btn" style="flex:1" onclick="exportCaptions('srt')">⬇ SRT</button>
+          <button class="act-btn" style="flex:1" onclick="exportCaptions('vtt')">⬇ VTT</button>
+        </div>
+        <div style="font-size:9px;color:var(--text2);margin-top:5px">Timestamps remapped to post-cut timeline</div>
+      </div>
+    </div>
+
+    <!-- Silence -->
+    <div class="panel-content tab-content" id="tab-silence">
+      <div class="panel-section">
+        <p style="font-size:10.5px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
+          Audio-based silence and dead-air detection.
+        </p>
+        <div class="sil-settings">
+          <div class="sil-setting">
+            <label>Silence Threshold</label>
+            <input type="range" id="silThreshold" min="-60" max="-10" value="-35" oninput="document.getElementById('silThreshVal').textContent=this.value+'dB';saveSilenceSettings()">
+            <div class="val" id="silThreshVal">-35dB</div>
+          </div>
+          <div class="sil-setting">
+            <label>Min Silence Duration</label>
+            <input type="range" id="silMinDur" min="0.1" max="3" step="0.1" value="0.5" oninput="document.getElementById('silDurVal').textContent=this.value+'s';saveSilenceSettings()">
+            <div class="val" id="silDurVal">0.5s</div>
+          </div>
+          <div class="sil-setting">
+            <label>Padding Before</label>
+            <input type="range" id="silPadBefore" min="0" max="0.5" step="0.05" value="0.1" oninput="document.getElementById('silPadBVal').textContent=this.value+'s';saveSilenceSettings()">
+            <div class="val" id="silPadBVal">0.1s</div>
+          </div>
+          <div class="sil-setting">
+            <label>Padding After</label>
+            <input type="range" id="silPadAfter" min="0" max="0.5" step="0.05" value="0.1" oninput="document.getElementById('silPadAVal').textContent=this.value+'s';saveSilenceSettings()">
+            <div class="val" id="silPadAVal">0.1s</div>
+          </div>
+          <div id="silSavedFlash" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--teal);opacity:0;transition:opacity .3s;text-align:right;margin-top:2px;">Saved ✓</div>
+        </div>
+        <button class="act-btn ai" onclick="analyzeAudio()">✦ Run AI Silence Removal</button>
+        <button class="act-btn" id="deadSpacesBtn" onclick="detectDeadSpaces()" disabled style="opacity:.45;cursor:not-allowed" title="Transcribe video first">⊘ Detect Dead Spaces <span id="deadSpacesEngine" style="font-size:8px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--s4);border:1px solid var(--b1);border-radius:3px;padding:1px 4px;margin-left:4px;">RMS</span></button>
+      </div>
+      <div class="panel-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div class="panel-label" style="margin:0">Silence Findings</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2)" id="silenceStats"></div>
+        </div>
+        <div style="display:flex;gap:5px;margin-bottom:6px">
+          <button class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="selectAllSilence()">All</button>
+          <button class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="selectNoneSilence()">None</button>
+        </div>
+        <div id="silenceFindings"><div class="empty-state">Run detection first</div></div>
+      </div>
+      <div style="padding:0 10px 10px">
+        <button class="act-btn primary" onclick="applyCuts()">✓ Apply Selected Cuts</button>
+      </div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="panel-content tab-content" id="tab-ai">
+      <div class="panel-section">
+        <div class="panel-label">Provider</div>
+
+        <!-- Provider pills -->
+        <div style="display:flex;gap:5px;margin-bottom:10px">
+          <button id="providerOR"     class="act-btn primary" style="margin:0;flex:1;font-size:9.5px" onclick="setProvider('openrouter')">☁ OpenRouter</button>
+          <button id="providerOllama" class="act-btn"         style="margin:0;flex:1;font-size:9.5px" onclick="setProvider('ollama')">⬡ Ollama (local)</button>
+        </div>
+
+        <!-- OpenRouter model row -->
+        <div id="providerORPanel">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+            <div id="selectedModelDisplay" style="flex:1;min-width:0;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--blue);background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">No model selected</div>
+            <button class="act-btn" style="margin:0;padding:5px 8px;font-size:9px;width:52px;flex-shrink:0" onclick="openModelPicker()">Change</button>
+          </div>
+          <div id="modelContextInfo" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:4px"></div>
+          <div id="modelPicker" style="display:none;margin-bottom:8px">
+            <input id="modelSearch" type="text" class="api-key-input" placeholder="Search models…" oninput="filterModels(this.value)" style="width:100%;margin-bottom:6px">
+            <div id="modelList" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+          </div>
+        </div>
+
+        <!-- Ollama model row -->
+        <div id="providerOllamaPanel" style="display:none">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+            <select id="ollamaModelSelect" style="flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:4px;color:var(--text);font-size:10px;font-family:'JetBrains Mono',monospace;padding:5px 7px;cursor:pointer">
+              <option value="">— fetch models —</option>
+            </select>
+            <button class="act-btn" style="margin:0;padding:5px 8px;font-size:9px;flex-shrink:0" onclick="fetchOllamaModels()" title="Refresh model list">⟳</button>
+          </div>
+          <div id="ollamaStatus" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:4px">Run: ollama serve</div>
+        </div>
+
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">AI Script Analysis</div>
+        <div id="aiAnalysisPing" class="wstat">— not checked</div>
+        <div style="margin:6px 0;font-size:10px;color:var(--text2)">Paste your original script (optional):</div>
+        <textarea id="scriptInput" rows="5"
+          style="width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:5px;color:var(--text);font-size:10.5px;padding:7px;resize:vertical;font-family:'Outfit',sans-serif;outline:none;transition:border-color .15s"
+          placeholder="Paste script here for retake detection..."></textarea>
+      </div>
+      <div class="panel-section">
+        <button class="act-btn ai" onclick="runAIScriptAnalysis()">✦ Analyse Script</button>
+        <button class="act-btn" id="fillerDetectBtn" onclick="detectFillers()" disabled style="opacity:.45;cursor:not-allowed" title="Transcribe video first">⊘ Detect Fillers</button>
+        <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);margin-top:4px" id="fillerStats"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Findings</div>
+        <div id="fillerList"><div class="empty-state">Run analysis first</div></div>
+      </div>
+      <div style="padding:0 10px 10px">
+        <button class="act-btn primary" onclick="applyCuts()">✓ Apply Selected Cuts</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="preview-area">
+      <div class="video-container" id="videoContainer">
+        <div class="no-video" id="noVideoMsg">
+          <div class="bi">🎬</div>
+          <p>Import a video to begin</p>
+        </div>
+        <video id="previewVideo" style="display:none" crossorigin="anonymous"></video>
+        <div class="caption-overlay" id="captionOverlay"></div>
+      </div>
+      <div class="aspect-badges">
+        <div class="ab active" onclick="setAspect('9/16',this)">9:16</div>
+        <div class="ab" onclick="setAspect('1/1',this)">1:1</div>
+        <div class="ab" onclick="setAspect('4/5',this)">4:5</div>
+        <div class="ab" onclick="setAspect('16/9',this)">16:9</div>
+      </div>
+    </div>
+    <div class="playback-bar">
+      <div class="pb-btn" onclick="skipTime(-10)" title="−10s">⏮</div>
+      <div class="pb-btn" onclick="skipTime(-5)">◀◀</div>
+      <div class="pb-btn play-main" id="playBtn" onclick="togglePlay()">▶</div>
+      <div class="pb-btn" onclick="skipTime(5)">▶▶</div>
+      <div class="pb-btn" onclick="skipTime(10)" title="+10s">⏭</div>
+      <div class="dv"></div>
+      <div class="pb-btn" onclick="setLoopA()" title="Set loop start">[A</div>
+      <div class="pb-btn" id="loopBtn" onclick="toggleLoop()" title="Toggle loop">⟳</div>
+      <div class="pb-btn" onclick="setLoopB()" title="Set loop end">B]</div>
+      <div class="dv"></div>
+      <button id="skipCutsBtn" onclick="toggleSkipCuts()" class="tbtn act" style="height:26px;font-size:9.5px">⊘ Skip Cuts</button>
+      <div class="dv"></div>
+      <select class="speed-sel" id="speedSelect" onchange="setSpeed(this.value)">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="0.75">0.75×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+      <div class="dv"></div>
+      <div class="vol-row">
+        <span class="vol-icon" id="volIcon">🔊</span>
+        <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)">
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="prop-group">
+      <div class="prop-title">Clip Info</div>
+      <div class="prop-row"><span class="prop-key">File</span><span class="prop-val" id="propName">—</span></div>
+      <div class="prop-row"><span class="prop-key">Duration</span><span class="prop-val" id="propDur">—</span></div>
+      <div class="prop-row"><span class="prop-key">Size</span><span class="prop-val" id="propRes">—</span></div>
+    </div>
+
+    <div class="prop-group">
+      <div class="prop-title">Flip</div>
+      <div class="flip-grid">
+        <div class="flip-btn" id="flipH" onclick="toggleFlip('h')"><span class="icon">↔</span><span>Horizontal</span></div>
+        <div class="flip-btn" id="flipV" onclick="toggleFlip('v')"><span class="icon">↕</span><span>Vertical</span></div>
+      </div>
+    </div>
+
+
+    <div class="prop-group">
+      <div class="prop-title">Speed</div>
+      <div class="prop-row">
+        <span class="prop-key">Rate</span>
+        <select class="speed-sel" onchange="setSpeed(this.value);document.getElementById('speedSelect').value=this.value" style="width:auto">
+          <option value="0.5">0.5×</option>
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="prop-group">
+      <div class="prop-title">Caption Style</div>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Font</div>
+      <select id="fontSelect" class="speed-sel" style="width:100%;height:26px;margin-bottom:5px" onchange="document.getElementById('captionOverlay').style.fontFamily=this.value">
+        <option value="Outfit">Outfit</option>
+        <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+        <option value="'Arial Black',sans-serif">Arial Black</option>
+        <option value="Georgia,serif">Georgia</option>
+        <option value="Impact,sans-serif">Impact</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:8px;">
+        <input type="file" id="fontFileInput" accept=".ttf,.otf,.woff,.woff2" style="display:none" onchange="if(this.files[0])loadCustomFont(this.files[0])">
+        <button class="act-btn" style="margin:0;width:100%;font-size:9px" onclick="document.getElementById('fontFileInput').click()">+ Load Font (.ttf/.otf)</button>
+      </label>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Weight</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <button class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="setCaptionWeight(400,this)">Regular</button>
+        <button class="act-btn primary" style="margin:0;flex:1;font-size:9px" onclick="setCaptionWeight(700,this)">Bold</button>
+        <button class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="setCaptionWeight(900,this)">Black</button>
+      </div>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Layout</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <button class="act-btn primary" id="layoutSingle" style="margin:0;flex:1;font-size:9px" onclick="setCaptionLayout('single',this)">Single</button>
+        <button class="act-btn" id="layoutStack"  style="margin:0;flex:1;font-size:9px" onclick="setCaptionLayout('stack',this)">2-line</button>
+        <button class="act-btn" id="layoutGrid"   style="margin:0;flex:1;font-size:9px" onclick="setCaptionLayout('grid',this)">Grid</button>
+      </div>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Size</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <input type="range" id="fontSizeSlider" min="8" max="120" value="15" style="flex:1" oninput="syncFontSize('slider',this.value)">
+        <input type="number" id="fontSizeInput" min="8" max="300" value="15" class="api-key-input" style="width:52px;padding:3px 5px;height:22px" oninput="syncFontSize('input',this.value)">
+        <span style="font-size:9px;color:var(--text2)">px</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:10px;color:var(--text2)">Text color</span>
+        <input type="color" value="#ffffff" style="width:36px;height:22px;border:1px solid var(--b2);border-radius:3px;background:var(--s2);cursor:pointer;padding:1px 2px" oninput="document.getElementById('captionOverlay').style.color=this.value">
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:10px;color:var(--text2)">Stroke</span>
+        <button id="strokeToggleBtn" class="act-btn" style="margin:0;width:auto;padding:2px 10px;font-size:9px" onclick="toggleStroke()">OFF</button>
+      </div>
+      <div id="strokeControls" style="display:none;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+          <span style="font-size:9.5px;color:var(--text2);flex:1">Thickness</span>
+          <input type="range" id="strokeThickness" min="0" max="20" step="0.1" value="1" style="flex:2" oninput="syncStrokeThickness('slider',this.value)">
+          <input type="number" id="strokeThickInput" min="0" max="40" step="0.1" value="1" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncStrokeThickness('input',this.value)">
+          <span style="font-size:9px;color:var(--text2)">px</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:9.5px;color:var(--text2)">Stroke color</span>
+          <input type="color" id="strokeColor" value="#000000" style="width:36px;height:22px;border:1px solid var(--b2);border-radius:3px;background:var(--s2);cursor:pointer;padding:1px 2px" oninput="applyStroke()">
+        </div>
+      </div>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Background</div>
+      <select class="speed-sel" style="width:100%;height:26px;margin-bottom:8px" onchange="setCaptionBg(this.value)">
+        <option value="rgba(0,0,0,.85)">Black</option>
+        <option value="rgba(200,255,71,.9)">Lime</option>
+        <option value="rgba(255,71,87,.9)">Red</option>
+        <option value="transparent">None</option>
+      </select>
+
+      <div style="font-size:10px;color:var(--text2);margin-bottom:6px">Position</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">X</span>
+        <input type="range" id="captionPosX" min="0" max="100" value="50" step="1" style="flex:1" oninput="syncCaptionPos('x',this.value)">
+        <input type="number" id="captionPosXInput" min="-50" max="150" value="50" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncCaptionPos('x',this.value)">
+        <span style="font-size:9px;color:var(--text2)">%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Y</span>
+        <input type="range" id="captionPosY" min="0" max="100" value="14" step="1" style="flex:1" oninput="syncCaptionPos('y',this.value)">
+        <input type="number" id="captionPosYInput" min="0" max="100" value="14" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncCaptionPos('y',this.value)">
+        <span style="font-size:9px;color:var(--text2)">%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Z</span>
+        <input type="range" id="captionPosZ" min="0.3" max="3" value="1" step="0.05" style="flex:1" oninput="syncCaptionPos('z',this.value)">
+        <input type="number" id="captionPosZInput" min="0.1" max="10" value="1" step="0.05" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncCaptionPos('z',this.value)">
+        <span style="font-size:9px;color:var(--text2)">×</span>
+      </div>
+    </div>
+
+    <div class="prop-group">
+      <div class="prop-title">Export</div>
+      <button class="act-btn primary" onclick="openExportModal()">⬇ Export Video</button>
+      <button class="act-btn" onclick="exportFrame()">📸 Snapshot Frame</button>
+      <button class="act-btn" onclick="exportSRT()">⬇ Export SRT</button>
+      <button class="act-btn" onclick="exportVTT()">⬇ Export VTT</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="panel-content tab-content" id="tab-settings">
+
+    <!-- Transcription Backend -->
+    <div class="panel-section">
+      <div class="panel-label">Transcription</div>
+
+      <!-- Backend pills -->
+      <div style="font-size:9px;color:var(--text2);margin-bottom:5px">Backend</div>
+      <div style="display:flex;gap:5px;margin-bottom:10px">
+        <button id="backendFWBtn" class="act-btn primary" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('faster-whisper')">faster-whisper</button>
+        <button id="backendWXBtn" class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('whisperx')">WhisperX</button>
+      </div>
+
+      <!-- WhisperX options — shown only when whisperx selected -->
+      <div id="whisperXOptions">
+        <div style="margin-bottom:8px">
+          <div style="font-size:9px;color:var(--text2);margin-bottom:4px">Model</div>
+          <select id="whisperXModelSelect" onchange="updateWhisperXSetting()"
+            style="width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:4px;color:var(--text);font-size:10px;padding:4px 6px;outline:none;cursor:pointer">
+            <option value="distil-large-v3">distil-large-v3 (recommended)</option>
+            <option value="large-v3">large-v3 (max accuracy, slow)</option>
+            <option value="medium">medium (lighter)</option>
+            <option value="small">small (fastest)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-bottom:3px">
+            <span>Batch size</span>
+            <span id="wxBatchVal" style="font-family:'JetBrains Mono',monospace;color:var(--blue-soft)">16</span>
+          </div>
+          <input type="range" id="wxBatchSlider" min="4" max="32" step="4" value="16" class="silence-range"
+            oninput="document.getElementById('wxBatchVal').textContent=this.value;updateWhisperXSetting()">
+          <div style="font-size:8px;color:var(--text3);margin-top:2px">Lower if CUDA out-of-memory</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <div style="font-size:10px;color:var(--text)">Retake detection</div>
+            <div style="font-size:8.5px;color:var(--text2)">Auto-flag repeated sentences</div>
+          </div>
+          <input type="checkbox" id="detectRetakesChk" checked onchange="toggleSetting('detectRetakes')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </div>
+      </div>
+
+      <!-- Active badge -->
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:8.5px;color:var(--text3)">Active:</span>
+        <span id="settingsBackendBadge" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);background:var(--s2);border:1px solid var(--b1);padding:2px 7px;border-radius:3px">unknown</span>
+      </div>
+    </div>
+
+    <!-- Detection Pipeline -->
+    <div class="panel-section">
+      <div class="panel-label">Detection Pipeline</div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div style="font-size:10px;color:var(--text)">Silero VAD</div>
+          <div style="font-size:8.5px;color:var(--text2)">Audio voice-activity detection</div>
+        </div>
+        <button id="settingVADBtn" class="act-btn primary" style="margin:0;width:auto;padding:2px 10px;font-size:9px" onclick="toggleSetting('useVAD')">ON</button>
+      </div>
+
+    </div>
+
+    <!-- VAD Tuning -->
+    <div class="panel-section" id="settingsVADTuning">
+      <div class="panel-label">VAD Tuning</div>
+
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-bottom:3px">
+          <span>Confidence threshold</span>
+          <span id="vadThreshVal" style="font-family:'JetBrains Mono',monospace;color:var(--blue-soft)">0.50</span>
+        </div>
+        <input type="range" id="vadThresh" min="0.1" max="0.9" step="0.05" value="0.5" class="silence-range"
+          oninput="S.settings.vadThreshold=+this.value;saveSettings();document.getElementById('vadThreshVal').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-bottom:3px">
+          <span>Min speech (ms)</span>
+          <span id="vadSpeechVal" style="font-family:'JetBrains Mono',monospace;color:var(--blue-soft)">250</span>
+        </div>
+        <input type="range" id="vadSpeech" min="50" max="1000" step="50" value="250" class="silence-range"
+          oninput="S.settings.vadMinSpeechMs=+this.value;saveSettings();document.getElementById('vadSpeechVal').textContent=this.value">
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-bottom:3px">
+          <span>Min silence (ms)</span>
+          <span id="vadSilenceVal" style="font-family:'JetBrains Mono',monospace;color:var(--blue-soft)">300</span>
+        </div>
+        <input type="range" id="vadSilence" min="100" max="2000" step="100" value="300" class="silence-range"
+          oninput="S.settings.vadMinSilenceMs=+this.value;saveSettings();document.getElementById('vadSilenceVal').textContent=this.value">
+      </div>
+    </div>
+
+    <!-- Auto Mode Steps -->
+    <div class="panel-section">
+      <div class="panel-label">Auto Mode Steps</div>
+      <div style="font-size:8.5px;color:var(--text3);margin-bottom:8px">Steps run when you click ⚡ Auto or ⚡ Deep</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">1. Transcribe (WhisperX)</span>
+          <input type="checkbox" id="autoTranscribeChk" checked onchange="toggleSetting('autoTranscribe')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">2. Waveform analysis</span>
+          <input type="checkbox" id="autoWaveformChk" checked onchange="toggleSetting('autoWaveform')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">3. Silence detection</span>
+          <input type="checkbox" id="autoSilenceChk" checked onchange="toggleSetting('autoSilence')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">4. Dead spaces (VAD)</span>
+          <input type="checkbox" id="autoDeadSpacesChk" checked onchange="toggleSetting('autoDeadSpaces')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">5. Filler words</span>
+          <input type="checkbox" id="autoFillersChk" checked onchange="toggleSetting('autoFillers')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+      </div>
+    </div>
+
+    <!-- Deep AI Mode Extras -->
+    <div class="panel-section">
+      <div class="panel-label">Deep AI Mode Extras</div>
+      <div style="font-size:8.5px;color:var(--text3);margin-bottom:8px">Additional steps in ⚡ Deep mode only</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-size:10px;color:var(--text)">AI script analysis</span>
+          <input type="checkbox" id="deepAIChk" checked onchange="toggleSetting('deepAI')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <button class="act-btn" style="width:100%;font-size:9px;color:var(--text2)" onclick="resetSettings()">Reset to Defaults</button>
+    </div>
+
+  </div>
+
+  <!-- CHAT PANEL -->
+  <div id="chatPanel" style="width:300px;background:var(--s1);border-left:1px solid var(--b1);display:none;flex-direction:column;flex-shrink:0;height:100%;overflow:hidden;">
+    <div style="height:42px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--b1);gap:8px;flex-shrink:0">
+      <span style="font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">AI Editor</span>
+      <div style="flex:1"></div>
+      <div id="chatModelBadge" style="font-size:8px;font-family:'JetBrains Mono',monospace;color:var(--blue-soft);background:var(--blue-dim);border:1px solid rgba(61,127,255,.2);padding:2px 6px;border-radius:3px;white-space:nowrap;overflow:hidden;max-width:120px;text-overflow:ellipsis">no model</div>
+      <button class="tbtn" style="height:18px;font-size:8px" onclick="clearChat()">Clear</button>
+    </div>
+
+    <div id="chatMessages" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;"></div>
+
+    <div style="padding:6px 10px;border-top:1px solid var(--b1);display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex-shrink:0">
+      <button class="tbtn act" id="ctxTranscript" onclick="toggleCtx('transcript')" style="height:18px;font-size:8px">Transcript</button>
+      <button class="tbtn act" id="ctxTimeline"   onclick="toggleCtx('timeline')"   style="height:18px;font-size:8px">Timeline</button>
+      <button class="tbtn"     id="ctxScript"     onclick="toggleCtx('script')"     style="height:18px;font-size:8px">Script</button>
+      <div style="flex:1"></div>
+      <button class="tbtn" id="chatAutoApplyBtn" onclick="toggleChatAutoApply()" style="height:18px;font-size:8px;color:var(--text2)" title="Auto-apply all timeline actions from AI responses">Auto-apply OFF</button>
+    </div>
+
+    <div style="padding:8px 10px;border-top:1px solid var(--b1);display:flex;gap:6px;flex-shrink:0">
+      <textarea id="chatInput" rows="2" style="flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:5px;color:var(--text);font-family:'Outfit',sans-serif;font-size:11px;padding:6px 8px;resize:none;outline:none;transition:border-color .15s" placeholder="Ask AI to edit, analyse, find issues…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button onclick="sendChat()" style="width:32px;height:32px;background:var(--blue);border:none;border-radius:5px;color:#fff;font-size:14px;cursor:pointer;align-self:flex-end;flex-shrink:0">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- TRIM BAR — between playback and timeline -->
+<div id="trimBar" style="display:flex;align-items:center;gap:8px;padding:4px 12px;background:var(--s1);border-top:1px solid var(--b1);border-bottom:1px solid var(--b1);flex-shrink:0">
+  <!-- Context label -->
+  <div id="trimContext" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+    <span id="trimContextLabel" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2)">● Clip trim</span>
+    <span id="trimContextDur"   style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--accent)"></span>
+  </div>
+  <div style="width:1px;height:14px;background:var(--b2);flex-shrink:0"></div>
+  <!-- In timecode -->
+  <span style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);flex-shrink:0">In: <span id="trimInLbl" style="color:var(--blue-soft)">0.0s</span></span>
+  <!-- Trim slider -->
+  <div style="flex:1;display:flex;justify-content:center">
+  <div class="trim-slider-track" id="trimTrack" style="width:420px;min-width:80px;max-width:420px">
+    <div class="trim-fill"    id="trimFill"></div>
+    <div class="trim-h"       id="trimHL" style="left:0"></div>
+    <div class="trim-h"       id="trimHR" style="right:0;left:auto"></div>
+    <div class="trim-playpos" id="trimPlayPos"></div>
+  </div>
+  </div>
+  <!-- Out timecode -->
+  <span style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);flex-shrink:0">Out: <span id="trimOutLbl" style="color:var(--blue-soft)">—</span></span>
+  <div style="width:1px;height:14px;background:var(--b2);flex-shrink:0"></div>
+  <!-- Actions -->
+  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="trimBefore()" title="Q">◁ Before</button>
+  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="trimAfter()"  title="W">After ▷</button>
+  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0;color:var(--accent);border-color:rgba(200,255,71,.3)" onclick="applyTrim()">✓ Apply</button>
+  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="resetTrim()">↺ Reset</button>
+</div>
+
+<!-- TIMELINE -->
+<div class="timeline-section">
+  <div class="timeline-header">
+    <span class="tl-title">Timeline</span>
+    <div class="dv"></div>
+    <div class="zoom-btn" onclick="zoomTL(-1)">−</div>
+    <div class="zoom-btn" onclick="zoomTL(1)">+</div>
+    <div class="dv"></div>
+    <button class="tool-btn active" id="selectTool" style="height:19px;font-size:8.5px">↖ Select</button>
+    <button class="tool-btn" id="trimTool" style="height:19px;font-size:8.5px">✂ Trim</button>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="splitAtPlayhead()" title="Ctrl+B">⊘ Split</button>
+    <div class="dv"></div>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="trimBefore()" title="Q">◁ Trim Before</button>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="trimAfter()" title="W">Trim After ▷</button>
+    <div class="dv"></div>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="snapPlayhead()">↯ Snap</button>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="snapGaps()">⊞ Snap Gaps</button>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" onclick="mergeCuts()" title="Merge overlapping/adjacent cuts of the same type">⊕ Merge Cuts</button>
+    <div class="dv"></div>
+    <button class="tool-btn" style="height:19px;font-size:8.5px" id="silVisBtn" onclick="toggleSilenceVis()">👁 Silence</button>
+  </div>
+  <div class="tl-body">
+    <div class="track-labels">
+      <div style="height:20px;border-bottom:1px solid var(--b1)"></div>
+      <div class="track-label"><span class="dot" style="background:var(--blue)"></span>Video</div>
+      <div class="waveform-label"><span class="dot" style="background:var(--teal)"></span>Wave</div>
+      <div class="track-label"><span class="dot" style="background:var(--red)"></span>Captions</div>
+    </div>
+    <div class="tracks-area" id="tracksArea">
+      <div class="tracks-inner" id="tracksInner">
+        <div class="ruler" id="ruler"></div>
+        <div class="track-row" id="videoTrack"></div>
+        <div class="waveform-row" id="waveformRow"><canvas id="tlWaveCanvas"></canvas></div>
+        <div class="track-row" id="captionTrack"></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI SILENCE MODAL -->
+<div class="modal-backdrop" id="silenceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">✦ AI Silence Removal</span>
+      <span class="modal-badge">AI POWERED</span>
+      <button class="modal-close" onclick="closeModal('silenceModal')">✕</button>
+    </div>
+    <div class="modal-body" id="silenceModalBody">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="act-btn active" id="srcOpenRouter" onclick="setAiSource('openrouter')" style="margin:0;flex:1;font-size:9.5px">✦ OpenRouter</button>
+        <button class="act-btn" id="srcWhisper" onclick="setAiSource('whisper')" style="margin:0;flex:1;font-size:9.5px">🖥 Local Whisper</button>
+        <button class="act-btn" onclick="pingAIStatus()" style="margin:0;width:auto;padding:0 10px;font-size:9.5px" title="Ping AI services">⟳ Ping</button>
+      </div>
+      <div id="aiPingStatus" style="font-size:9.5px;font-family:'JetBrains Mono',monospace;padding:5px 7px;border-radius:4px;background:var(--s2);border:1px solid var(--b1);color:var(--text2);margin-bottom:12px;line-height:1.7;">— not checked</div>
+      <div class="waveform-preview">
+        <canvas id="waveCanvas"></canvas>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="act-btn" style="flex:1;margin:0" onclick="analyzeAudio()">🔍 Analyze Audio</button>
+        <button class="act-btn ai" style="flex:1;margin:0" onclick="runAIAnalysis()">✦ AI Analyze</button>
+      </div>
+      <div id="silenceResults"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="act-btn" style="margin:0;width:auto;padding:7px 14px" onclick="closeModal('silenceModal')">Cancel</button>
+      <button class="act-btn primary" style="margin:0;width:auto;padding:7px 18px" onclick="applySilenceRemoval()">✓ Apply Cuts</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI CAPTIONS MODAL -->
+<div class="modal-backdrop" id="captionModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">✦ AI Caption Generation</span>
+      <span class="modal-badge">AI POWERED</span>
+      <button class="modal-close" onclick="closeModal('captionModal')">✕</button>
+    </div>
+    <div class="modal-body" id="captionModalBody">
+      <div class="ai-analysis-box" style="margin-bottom:14px;">
+        <div class="ai-label">How it works</div>
+        <p>Uses faster-whisper (local) to transcribe your video. Run <strong style="color:var(--teal)">whisper_server.py</strong> and ping the server in the Captions tab to enable transcription.</p>
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);margin-bottom:6px;">Caption Style</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="act-btn" style="margin:0;flex:1" id="styleUGC" onclick="setCaptionStyle('ugc')">UGC Natural</button>
+          <button class="act-btn" style="margin:0;flex:1" id="styleWord" onclick="setCaptionStyle('word')">Word-by-Word</button>
+          <button class="act-btn" style="margin:0;flex:1" id="stylePhrase" onclick="setCaptionStyle('phrase')">Phrase</button>
+        </div>
+      </div>
+      <div id="captionGenResults"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="act-btn" style="margin:0;width:auto;padding:7px 14px" onclick="closeModal('captionModal')">Cancel</button>
+      <button class="act-btn ai" style="margin:0;width:auto;padding:7px 18px" onclick="generateAICaptions()">✦ Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-backdrop" id="exportModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <span class="modal-title">Export Video</span>
+      <button class="modal-close" onclick="closeExportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Summary -->
+      <div id="exportSummary" style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:10.5px;line-height:1.8;color:var(--text2)"></div>
+
+      <!-- Filename -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:9.5px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px">Output filename</div>
+        <input id="exportFilename" type="text" class="api-key-input" style="width:100%;padding:6px 9px;font-family:'JetBrains Mono',monospace;font-size:10px" placeholder="clipcut_export.mp4">
+      </div>
+
+      <!-- Format -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:9.5px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px">Format</div>
+        <div style="display:flex;gap:6px">
+          <button id="fmtMP4" class="act-btn primary" style="margin:0;flex:1;font-size:10px" onclick="setExportFormat('mp4')">MP4 — GPU (h264_nvenc)</button>
+          <button id="fmtWebM" class="act-btn" style="margin:0;flex:1;font-size:10px" onclick="setExportFormat('webm')">WebM — Browser</button>
+        </div>
+      </div>
+
+      <!-- Preset -->
+      <div id="exportPresetRow" style="margin-bottom:12px">
+        <div style="font-size:9.5px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px">Encoder preset</div>
+        <div style="display:flex;gap:6px">
+          <button id="presetFast"     class="act-btn primary" style="margin:0;flex:1;font-size:10px" onclick="setExportPreset('fast')">Fast</button>
+          <button id="presetBalanced" class="act-btn"         style="margin:0;flex:1;font-size:10px" onclick="setExportPreset('balanced')">Balanced</button>
+          <button id="presetQuality"  class="act-btn"         style="margin:0;flex:1;font-size:10px" onclick="setExportPreset('quality')">Quality</button>
+        </div>
+        <div id="presetHint" style="font-size:9px;color:var(--text3);margin-top:4px;text-align:right">nvenc p2 · cq 28</div>
+      </div>
+
+      <!-- Burn captions -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:8px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px">
+        <div>
+          <div style="font-size:10.5px;color:var(--text)">Burn-in captions</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:1px">Render captions permanently into video via ffmpeg subtitles filter</div>
+        </div>
+        <button id="burnCapsBtn" class="act-btn" style="margin:0;width:auto;padding:3px 10px;font-size:9px" onclick="toggleBurnCaptions()">OFF</button>
+      </div>
+
+      <!-- Progress panel (hidden until export starts) -->
+      <div id="exportProgress" style="display:none;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px;margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span id="exportStatusLabel" style="font-size:10px;color:var(--teal)">Encoding...</span>
+          <span id="exportElapsed"     style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">0s</span>
+        </div>
+        <div class="progress-bar-wrap" style="height:8px;margin-bottom:6px">
+          <div class="progress-bar-fill" id="exportProgressFill" style="transition:width .4s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span id="exportProgressLabel" style="font-size:9px;color:var(--text2)">Preparing...</span>
+          <span id="exportProgressPct"   style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--blue-soft)">0%</span>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button id="exportCancelBtn" class="act-btn" style="margin:0;width:auto;padding:7px 14px" onclick="cancelExport()">Cancel</button>
+      <button id="exportStartBtn"  class="act-btn primary" style="margin:0;width:auto;padding:7px 22px" onclick="startExport()">⬇ Export</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="transcriptToolbar">
+  <button class="tx-tool-btn tx-cut" onclick="_txCut()">✕ Cut</button>
+  <button class="tx-tool-btn tx-uncut" onclick="_txUncut()">⊘ Uncut</button>
+  <button class="tx-tool-btn" onclick="_txJump()">↗ Jump</button>
+</div>
+<script src="js/core/logger.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/config/config.js"></script>
+<script src="js/captions/captions.js"></script>
+<script src="js/captions/whisper.js"></script>
+<script src="js/detection/waveform.js"></script>
+<script src="js/detection/silence.js"></script>
+<script src="js/detection/ai.js"></script>
+<script src="js/media/import.js"></script>
+<script src="js/media/export.js"></script>
+<script src="js/playback/playback.js"></script>
+<script src="js/timeline/trim.js"></script>
+<script src="js/timeline/timeline.js"></script>
+<script src="js/core/history.js"></script>
+<script src="js/ui/ui.js"></script>
+<script src="js/ui/settings.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
