@@ -21,12 +21,13 @@ async function checkWhisperServer(){
     if(!window.pywebview) throw new Error('Not running in pywebview — launch via serve.py');
     const d=await window.pywebview.api.ping();
     if(!d.online) throw new Error(d.error||'Model failed to load');
-    const backendLabel = d.backend==='whisperx' ? 'WhisperX' : 'faster-whisper';
+    const backendLabel = d.backend==='parakeet' ? 'Parakeet' : d.backend==='whisperx' ? 'WhisperX' : 'faster-whisper';
+    const backendColor = d.backend==='parakeet' ? 'var(--teal)' : d.backend==='whisperx' ? 'var(--blue-soft)' : 'var(--text2)';
     el.textContent=`✓ Ready — ${backendLabel} · ${d.model} · ${d.device}`;
     el.style.color='var(--accent)';
     // Update settings tab backend badge if present
     const badge=document.getElementById('settingsBackendBadge');
-    if(badge){ badge.textContent=backendLabel; badge.style.color=d.backend==='whisperx'?'var(--blue-soft)':'var(--text2)'; }
+    if(badge){ badge.textContent=backendLabel; badge.style.color=backendColor; }
     toast(`✓ ${backendLabel} ready`);
   } catch(e){
     el.textContent=`✕ ${e.message}`;
@@ -49,7 +50,12 @@ async function transcribeWithWhisper(){
     const data=await window.pywebview.api.transcribe(S.current.sourcePath);
     if(data.error) throw new Error(data.error);
 
-    const backendLabel = data.backend==='whisperx' ? 'WhisperX' : 'faster-whisper';
+    const backendLabel = data.backend === 'parakeet' ? 'Parakeet'
+                       : data.backend === 'whisperx'  ? 'WhisperX'
+                       : 'faster-whisper';
+
+    // Use real video FPS from ffprobe for accurate frame-snapping; fall back to 30
+    if (data.fps && data.fps > 0) _captionFps = data.fps;
 
     // Build word objects — preserve rawText for sentence-boundary detection so that
     // strip-punctuation mode doesn't break .!? chunk splitting

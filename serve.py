@@ -37,14 +37,15 @@ _cfg                = _load_config()
 MODEL_SIZE          = _cfg.get('whisper_model',        'base')
 DEVICE              = 'cuda'
 COMPUTE_TYPE        = 'float16'
-WHISPER_BACKEND     = _cfg.get('whisper_backend',      'whisperx')  # 'faster-whisper' | 'whisperx'
+WHISPER_BACKEND     = _cfg.get('whisper_backend',      'whisperx')  # 'parakeet' | 'whisperx' | 'faster-whisper'
 WHISPERX_MODEL      = _cfg.get('whisperx_model',       'distil-large-v3')
 WHISPERX_BATCH_SIZE = int(_cfg.get('whisperx_batch_size', 16))
+PARAKEET_MODEL_ID   = _cfg.get('parakeet_model',       'nvidia/parakeet-tdt-0.6b-v3')
 
 
 def _write_config(updates):
     """Merge updates dict into config.json and update module-level globals."""
-    global WHISPER_BACKEND, WHISPERX_MODEL, WHISPERX_BATCH_SIZE, _whisperx_model
+    global WHISPER_BACKEND, WHISPERX_MODEL, WHISPERX_BATCH_SIZE, PARAKEET_MODEL_ID, _whisperx_model
     cfg_path = os.path.join(BASE_DIR, 'config.json')
     try:
         with open(cfg_path, encoding='utf-8') as f:
@@ -54,7 +55,6 @@ def _write_config(updates):
     data.update(updates)
     with open(cfg_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
-    # Apply live — reset whisperx singleton if model changed
     if 'whisper_backend' in updates:
         WHISPER_BACKEND = updates['whisper_backend']
     if 'whisperx_model' in updates:
@@ -63,6 +63,8 @@ def _write_config(updates):
         WHISPERX_MODEL = updates['whisperx_model']
     if 'whisperx_batch_size' in updates:
         WHISPERX_BATCH_SIZE = int(updates['whisperx_batch_size'])
+    if 'parakeet_model' in updates:
+        PARAKEET_MODEL_ID = updates['parakeet_model']
     log('CONFIG', f'Saved: {updates}')
 
 PRESET_MAP = {
@@ -70,6 +72,30 @@ PRESET_MAP = {
     "balanced": {"nvenc": "p4", "tune": "hq",  "bitrate": "8M",  "x264": "medium", "crf": "22"},
     "quality":  {"nvenc": "p6", "tune": "hq",  "bitrate": "15M", "x264": "slow",   "crf": "18"},
 }
+
+
+# ── Parakeet TDT model (lazy, singleton) ─────────────────────────────────────
+
+_parakeet_model = None
+_parakeet_lock  = threading.Lock()
+
+def _get_parakeet_model():
+    global _parakeet_model
+    with _parakeet_lock:
+        if _parakeet_model is None:
+            log('PARAKEET', f'Loading {PARAKEET_MODEL_ID} (NeMo)...')
+            t0 = time.time()
+            try:
+                import nemo.collections.asr as nemo_asr
+                m = nemo_asr.models.ASRModel.from_pretrained(PARAKEET_MODEL_ID)
+                m.cuda()
+                m.eval()
+                _parakeet_model = m
+                log('PARAKEET', f'✓ Ready on GPU ({time.time()-t0:.1f}s)')
+            except Exception as e:
+                log('PARAKEET', f'✕ Failed to load: {e}')
+                raise
+    return _parakeet_model
 
 
 # ── Whisper model (lazy, singleton) ──────────────────────────────────────────
@@ -393,15 +419,16 @@ class API:
             return {'ok': False, 'error': str(e)}
 
     def get_whisper_config(self):
-        """Return current whisper/whisperx config values for the Settings UI."""
+        """Return current transcription config values for the Settings UI."""
         return {
             'whisper_backend':     WHISPER_BACKEND,
             'whisperx_model':      WHISPERX_MODEL,
             'whisperx_batch_size': WHISPERX_BATCH_SIZE,
+            'parakeet_model':      PARAKEET_MODEL_ID,
         }
 
     def save_whisper_config(self, backend, model, batch_size):
-        """Write whisper settings to config.json and apply live."""
+        """Write transcription settings to config.json and apply live."""
         _write_config({
             'whisper_backend':     backend,
             'whisperx_model':      model,
@@ -413,7 +440,10 @@ class API:
         """Load (or confirm loaded) transcription + VAD models. Returns {online, model, device, backend}."""
         log('WHISPER', f'ping() — backend={WHISPER_BACKEND}')
         try:
-            if WHISPER_BACKEND == 'whisperx':
+            if WHISPER_BACKEND == 'parakeet':
+                _get_parakeet_model()
+                model_label = PARAKEET_MODEL_ID.split('/')[-1]
+            elif WHISPER_BACKEND == 'whisperx':
                 _get_whisperx_model()
                 model_label = WHISPERX_MODEL
             else:
@@ -429,9 +459,10 @@ class API:
     def transcribe(self, source_path):
         """
         Extract audio and transcribe. Backend switches on WHISPER_BACKEND config key.
-        faster-whisper: word timestamps via beam search (may drift).
-        whisperx:       faster-whisper transcription + Wav2Vec2 forced alignment + retake detection.
-        Both return {words:[{word,start,end}], language, duration} + optional retake_cuts.
+        parakeet:     NVIDIA NeMo TDT — fastest, English-primary, word timestamps built-in.
+        whisperx:     faster-whisper + Wav2Vec2 forced alignment + retake detection.
+        faster-whisper: beam search word timestamps (fallback).
+        All paths return {words, language, duration, fps, backend} + optional retake_cuts.
         """
         log('TRANSCRIBE', f'source: {source_path}  backend: {WHISPER_BACKEND}')
         if not source_path or not os.path.exists(source_path):
@@ -441,6 +472,26 @@ class API:
         size_mb = os.path.getsize(source_path) / 1_048_576
         log('TRANSCRIBE', f'File size: {size_mb:.1f} MB')
 
+        # Probe actual video framerate for accurate caption frame-snapping in JS
+        def _probe_fps(path):
+            r = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=r_frame_rate',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            raw = r.stdout.strip()  # e.g. "30000/1001" or "30/1"
+            try:
+                if '/' in raw:
+                    n, d = raw.split('/')
+                    return round(float(n) / float(d), 3) if float(d) else 30.0
+                return round(float(raw), 3) if raw else 30.0
+            except Exception:
+                return 30.0
+
+        video_fps = _probe_fps(source_path)
+        log('TRANSCRIBE', f'Video FPS: {video_fps}')
+
         with tempfile.TemporaryDirectory() as tmp:
             audio_path = os.path.join(tmp, 'audio.wav')
 
@@ -449,6 +500,50 @@ class API:
             log('TRANSCRIBE', 'Extracting audio (16kHz mono WAV)...')
             t0 = time.time()
             r  = subprocess.run(cmd, capture_output=True, text=True)
+            # ── Parakeet path ──────────────────────────────────────────────
+            if WHISPER_BACKEND == 'parakeet':
+                try:
+                    model = _get_parakeet_model()
+                    log('PARAKEET', 'Transcribing with word timestamps...')
+                    t1 = time.time()
+                    hypotheses = model.transcribe(
+                        [audio_path], timestamps=True, return_hypotheses=True
+                    )
+                    log('PARAKEET', f'✓ Done in {time.time()-t1:.1f}s')
+
+                    hyp = hypotheses[0] if isinstance(hypotheses, list) else hypotheses
+                    word_ts = (hyp.timestamp or {}).get('word', [])
+                    words = []
+                    for wt in word_ts:
+                        w_text = (wt.get('word') or '').strip()
+                        if not w_text:
+                            continue
+                        # TDT: seconds; CTC fallback: frame offsets → convert
+                        if 'start' in wt:
+                            s, e = float(wt['start']), float(wt['end'])
+                        else:
+                            hop = 0.01  # NeMo default 10ms hop
+                            s   = float(wt.get('start_offset', 0)) * hop
+                            e   = float(wt.get('end_offset',   0)) * hop
+                        words.append({'word': w_text, 'start': round(s, 3), 'end': round(e, 3)})
+
+                    # Probe duration
+                    probe = subprocess.run(
+                        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                         '-of', 'default=noprint_wrappers=1:nokey=1', source_path],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    )
+                    dur = float(probe.stdout.strip() or 0)
+                    log('PARAKEET', f'✓ {len(words)} words — returning to JS')
+                    return {
+                        'words':    words,
+                        'language': 'en',
+                        'duration': round(dur, 2),
+                        'fps':      video_fps,
+                        'backend':  'parakeet',
+                    }
+                except Exception as e:
+                    log('PARAKEET', f'✕ Failed: {e} — falling back to whisperx')
             if r.returncode != 0:
                 log('TRANSCRIBE', f'✕ Audio extraction failed (exit {r.returncode})')
                 log('TRANSCRIBE', r.stderr[-400:])
@@ -506,6 +601,7 @@ class API:
                         'words':       words,
                         'language':    lang,
                         'duration':    round(dur, 2),
+                        'fps':         video_fps,
                         'retake_cuts': retake_cuts,
                         'backend':     'whisperx',
                     }
@@ -549,6 +645,7 @@ class API:
                 'words':    words,
                 'language': info.language,
                 'duration': round(info.duration, 2),
+                'fps':      video_fps,
                 'backend':  'faster-whisper',
             }
 
@@ -1057,7 +1154,11 @@ def _auto_ping_whisper():
     time.sleep(2)  # let the window finish loading
     log('WHISPER', f'Auto-ping: loading models (backend={WHISPER_BACKEND})...')
     try:
-        if WHISPER_BACKEND == 'whisperx':
+        if WHISPER_BACKEND == 'parakeet':
+            _get_parakeet_model()
+            model_label   = PARAKEET_MODEL_ID.split('/')[-1]
+            backend_label = 'Parakeet'
+        elif WHISPER_BACKEND == 'whisperx':
             _get_whisperx_model()
             model_label   = WHISPERX_MODEL
             backend_label = 'WhisperX'
@@ -1068,7 +1169,9 @@ def _auto_ping_whisper():
         _get_vad_model()
         status_text = f'\u2713 Ready \u00b7 {backend_label} \u00b7 {model_label} \u00b7 {DEVICE}'
         badge_text  = backend_label
-        badge_color = 'var(--blue-soft)' if WHISPER_BACKEND == 'whisperx' else 'var(--text2)'
+        badge_color = ('var(--teal)' if WHISPER_BACKEND == 'parakeet'
+                       else 'var(--blue-soft)' if WHISPER_BACKEND == 'whisperx'
+                       else 'var(--text2)')
         js = (
             f"document.getElementById('whisperStatus').textContent={repr(status_text)};"
             f"document.getElementById('whisperStatus').style.color='var(--teal)';"

@@ -401,8 +401,18 @@
       <!-- Backend pills -->
       <div style="font-size:9px;color:var(--text2);margin-bottom:5px">Backend</div>
       <div style="display:flex;gap:5px;margin-bottom:10px">
-        <button id="backendFWBtn" class="act-btn primary" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('faster-whisper')">faster-whisper</button>
+        <button id="backendPKBtn" class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('parakeet')">Parakeet</button>
         <button id="backendWXBtn" class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('whisperx')">WhisperX</button>
+        <button id="backendFWBtn" class="act-btn primary" style="margin:0;flex:1;font-size:9px" onclick="setWhisperBackend('faster-whisper')">faster-whisper</button>
+      </div>
+
+      <!-- Parakeet options — shown only when parakeet selected -->
+      <div id="parakeetOptions" style="display:none;margin-bottom:10px">
+        <div style="font-size:8.5px;color:var(--text2);background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:6px 8px;line-height:1.5">
+          <span style="color:var(--teal)">nvidia/parakeet-tdt-0.6b-v3</span><br>
+          English-primary · 50× real-time · word timestamps built-in<br>
+          <span style="color:var(--text3)">~2.4GB VRAM · auto-falls back to WhisperX if unavailable</span>
+        </div>
       </div>
 
       <!-- WhisperX options — shown only when whisperx selected -->

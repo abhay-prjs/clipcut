@@ -84,21 +84,29 @@ async function updateWhisperXSetting(){
   await _saveWhisperConfig();
 }
 
+function _backendLabel(backend){
+  return backend === 'parakeet' ? 'Parakeet' : backend === 'whisperx' ? 'WhisperX' : 'faster-whisper';
+}
+function _backendColor(backend){
+  return backend === 'parakeet' ? 'var(--teal)' : backend === 'whisperx' ? 'var(--blue-soft)' : 'var(--text2)';
+}
+
 async function _saveWhisperConfig(){
   if(!window.pywebview) return;
-  const backend    = document.getElementById('backendFWBtn')?.classList.contains('primary') ? 'faster-whisper' : 'whisperx';
+  let backend = 'faster-whisper';
+  if(document.getElementById('backendPKBtn')?.classList.contains('primary')) backend = 'parakeet';
+  else if(document.getElementById('backendWXBtn')?.classList.contains('primary')) backend = 'whisperx';
   const model      = document.getElementById('whisperXModelSelect')?.value || 'distil-large-v3';
   const batch_size = parseInt(document.getElementById('wxBatchSlider')?.value || '16');
   try{
     const r = await window.pywebview.api.save_whisper_config(backend, model, batch_size);
     if(r.ok){
-      const label = backend === 'whisperx' ? 'WhisperX' : 'faster-whisper';
+      const label = _backendLabel(backend);
       const badge = document.getElementById('settingsBackendBadge');
-      if(badge){ badge.textContent = label; badge.style.color = backend==='whisperx' ? 'var(--blue-soft)' : 'var(--text2)'; }
-      // Also update the Captions tab status line
+      if(badge){ badge.textContent = label; badge.style.color = _backendColor(backend); }
       const ws = document.getElementById('whisperStatus');
       if(ws && ws.textContent.startsWith('✓')){
-        ws.textContent = ws.textContent.replace(/faster-whisper|WhisperX/, label);
+        ws.textContent = ws.textContent.replace(/faster-whisper|WhisperX|Parakeet/, label);
       }
       toast(`✓ Backend → ${label}`);
     }
@@ -106,13 +114,16 @@ async function _saveWhisperConfig(){
 }
 
 function _updateBackendUI(backend){
-  const fwBtn    = document.getElementById('backendFWBtn');
-  const wxBtn    = document.getElementById('backendWXBtn');
-  const wxPanel  = document.getElementById('whisperXOptions');
-  const isWX     = backend === 'whisperx';
-  if(fwBtn){ fwBtn.className = `act-btn${!isWX ? ' primary' : ''}`; }
-  if(wxBtn){ wxBtn.className = `act-btn${isWX  ? ' primary' : ''}`; }
-  if(wxPanel){ wxPanel.style.display = isWX ? 'block' : 'none'; }
+  const pkBtn   = document.getElementById('backendPKBtn');
+  const fwBtn   = document.getElementById('backendFWBtn');
+  const wxBtn   = document.getElementById('backendWXBtn');
+  const pkPanel = document.getElementById('parakeetOptions');
+  const wxPanel = document.getElementById('whisperXOptions');
+  if(pkBtn){ pkBtn.className = `act-btn${backend === 'parakeet'       ? ' primary' : ''}`; }
+  if(fwBtn){ fwBtn.className = `act-btn${backend === 'faster-whisper' ? ' primary' : ''}`; }
+  if(wxBtn){ wxBtn.className = `act-btn${backend === 'whisperx'       ? ' primary' : ''}`; }
+  if(pkPanel){ pkPanel.style.display = backend === 'parakeet' ? 'block' : 'none'; }
+  if(wxPanel){ wxPanel.style.display = backend === 'whisperx' ? 'block' : 'none'; }
 }
 
 async function _loadWhisperConfigFromServer(){
@@ -128,9 +139,8 @@ async function _loadWhisperConfigFromServer(){
     if(label)  { label.textContent = cfg.whisperx_batch_size; }
     const badge = document.getElementById('settingsBackendBadge');
     if(badge){
-      const bl = cfg.whisper_backend === 'whisperx' ? 'WhisperX' : 'faster-whisper';
-      badge.textContent = bl;
-      badge.style.color = cfg.whisper_backend === 'whisperx' ? 'var(--blue-soft)' : 'var(--text2)';
+      badge.textContent = _backendLabel(cfg.whisper_backend);
+      badge.style.color = _backendColor(cfg.whisper_backend);
     }
   } catch(e){ /* pywebview not ready yet */ }
 }
