@@ -246,17 +246,17 @@
     </div>
     <div class="playback-bar">
       <div class="pb-pill">
-        <div class="pb-btn" onclick="skipTime(-10)" title="−10s">⏮</div>
-        <div class="pb-btn" onclick="skipTime(-5)">◀◀</div>
-        <div class="pb-btn play-main" id="playBtn" onclick="togglePlay()">▶</div>
-        <div class="pb-btn" onclick="skipTime(5)">▶▶</div>
-        <div class="pb-btn" onclick="skipTime(10)" title="+10s">⏭</div>
+        <div class="pb-btn" onclick="skipTime(-10)" title="−10s"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM19 5 8 12l11 7z"/></svg></div>
+        <div class="pb-btn" onclick="skipTime(-5)" title="−5s"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5 3 12l8 7z"/></svg></div>
+        <div class="pb-btn play-main" id="playBtn" onclick="togglePlay()"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff" style="margin-left:2px"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="pb-btn" onclick="skipTime(5)" title="+5s"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 5l8 7-8 7z"/></svg></div>
+        <div class="pb-btn" onclick="skipTime(10)" title="+10s"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM5 5l11 7-11 7z"/></svg></div>
         <div class="dv"></div>
-        <div class="pb-btn loop-ab" onclick="setLoopA()" title="Set loop start">[A</div>
-        <div class="pb-btn" id="loopBtn" onclick="toggleLoop()" title="Toggle loop">⟳</div>
-        <div class="pb-btn loop-ab" onclick="setLoopB()" title="Set loop end">B]</div>
+        <div class="pb-btn loop-ab" onclick="setLoopA()" title="Set loop start">A</div>
+        <div class="pb-btn" id="loopBtn" onclick="toggleLoop()" title="Toggle loop"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M5 15a8 8 0 0 0 14 3M19 9A8 8 0 0 0 5 6" stroke-linecap="round"/></svg></div>
+        <div class="pb-btn loop-ab" onclick="setLoopB()" title="Set loop end">B</div>
         <div class="dv"></div>
-        <button id="skipCutsBtn" onclick="toggleSkipCuts()" class="tbtn act" style="height:32px;font-size:9.5px;box-sizing:border-box">⊘ Skip Cuts</button>
+        <button id="skipCutsBtn" onclick="toggleSkipCuts()" class="tbtn act" style="height:32px;font-size:9.5px;box-sizing:border-box;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M5.5 5.5l13 13" stroke-linecap="round"/></svg>Skip Cuts</button>
         <select class="speed-sel" id="speedSelect" onchange="setSpeed(this.value)">
           <option value="0.25">0.25×</option>
           <option value="0.5">0.5×</option>
@@ -267,7 +267,7 @@
           <option value="2">2×</option>
         </select>
         <div class="vol-row">
-          <span class="vol-icon" id="volIcon">🔊</span>
+          <span class="vol-icon" id="volIcon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7" stroke-linecap="round"/></svg></span>
           <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)">
         </div>
       </div>

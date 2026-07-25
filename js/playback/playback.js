@@ -5,10 +5,17 @@
 // Calling video.pause() while a play() Promise is still pending throws AbortError.
 let _playPromise = null;
 
+const _ICON_PLAY  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="#fff" style="margin-left:2px"><path d="M8 5v14l11-7z"/></svg>';
+const _ICON_PAUSE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+function _setPlayIcon(isPlaying){
+  const btn=document.getElementById('playBtn');
+  if(btn) btn.innerHTML = isPlaying ? _ICON_PAUSE : _ICON_PLAY;
+}
+
 function _playVideo() {
   _playPromise = video.play();
   S.playing = true;
-  document.getElementById('playBtn').textContent = '⏸';
+  _setPlayIcon(true);
   if (_playPromise !== undefined) {
     _playPromise.then(() => {
       _playPromise = null;
@@ -17,7 +24,7 @@ function _playVideo() {
       _playPromise = null;
       if (video.paused) {
         S.playing = false;
-        document.getElementById('playBtn').textContent = '▶';
+        _setPlayIcon(false);
       }
     });
   }
@@ -25,7 +32,7 @@ function _playVideo() {
 
 function _pauseVideo() {
   S.playing = false;
-  document.getElementById('playBtn').textContent = '▶';
+  _setPlayIcon(false);
   if (_playPromise !== null) {
     // Chain pause after the pending play resolves to avoid AbortError
     _playPromise.then(() => video.pause()).catch(() => {});
@@ -54,7 +61,10 @@ function togglePlay() {
 
 function skipTime(d){if(!video.src)return;video.currentTime=clamp(video.currentTime+d,S.trimIn,S.trimOut||S.duration);}
 function setSpeed(v){video.playbackRate=parseFloat(v);document.getElementById('speedSelect').value=v;}
-function setVolume(v){video.volume=v;document.getElementById('volIcon').textContent=v==0?'🔇':v<.5?'🔉':'🔊';}
+const _ICON_VOL_MUTE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6" stroke-linecap="round"/></svg>';
+const _ICON_VOL_LOW  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 10a3 3 0 0 1 0 4" stroke-linecap="round"/></svg>';
+const _ICON_VOL_HIGH = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7" stroke-linecap="round"/></svg>';
+function setVolume(v){video.volume=v;document.getElementById('volIcon').innerHTML=v==0?_ICON_VOL_MUTE:v<.5?_ICON_VOL_LOW:_ICON_VOL_HIGH;}
 
 // ── Playback frame loop ───────────────────────────────────────────────────────
 // Uses requestVideoFrameCallback (rVFC) when available — fires on every rendered

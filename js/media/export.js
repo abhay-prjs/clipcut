@@ -389,7 +389,7 @@ async function _doWebMExport(){
     const check=setInterval(()=>{
       if(video.currentTime>=(S.trimOut||S.duration)-0.1){
         clearInterval(check); video.pause(); rec.stop();
-        S.playing=false; document.getElementById('playBtn').textContent='▶';
+        S.playing=false; _setPlayIcon(false);
         r();
       }
     },100);

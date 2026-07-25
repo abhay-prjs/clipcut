@@ -48,7 +48,7 @@ function _applySnapshot(snap){
   // getting out of sync with actual video state (Space press would "pause" instead of play)
   _stopRVFC();
   S.playing = false;
-  document.getElementById('playBtn').textContent = '▶';
+  _setPlayIcon(false);
 
   if(S.current){
     video.onerror = null;
