@@ -22,6 +22,20 @@
   --timeline-h: 220px;
   --panel-w: 260px;
   --right-w: 280px;
+
+  /* Timeline redesign — solid fills, fixed per-type colors (see FIXNOTES_TIMELINE_PLAYBACK.md Part C2) */
+  --tl-seg-fill: #1B3A5C;
+  --tl-seg-border: #409CFF;
+  --tl-seg-text: #BFDBFE;
+  --tl-cut-dead: #E5484D;
+  --tl-cut-filler: #8E6FF7;
+  --tl-cut-retake: #C92A2A;
+  --tl-cut-weak: #D9A514;
+  --tl-highlight: #2AB8A5;
+  --tl-gap: #101013;
+  --tl-cap-fill: #0E3F4A;
+  --tl-cap-border: #64D2FF;
+  --tl-cap-text: #A8E6FF;
 }
 
 *{margin:0;padding:0;box-sizing:border-box;}
