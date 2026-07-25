@@ -35,7 +35,7 @@ document.getElementById('trimHL').addEventListener('mousedown',e=>{
   dragTrimMode='in';
   if(S.selectedCutId!==null){
     const cut=S.cuts.find(c=>c.id===S.selectedCutId);
-    if(cut) dragCutRef={cutStart:cut.start,cutEnd:cut.end,mouseX:e.clientX};
+    if(cut){saveHistory();dragCutRef={cutStart:cut.start,cutEnd:cut.end,mouseX:e.clientX};}
   }
   e.stopPropagation();
 });
@@ -43,7 +43,7 @@ document.getElementById('trimHR').addEventListener('mousedown',e=>{
   dragTrimMode='out';
   if(S.selectedCutId!==null){
     const cut=S.cuts.find(c=>c.id===S.selectedCutId);
-    if(cut) dragCutRef={cutStart:cut.start,cutEnd:cut.end,mouseX:e.clientX};
+    if(cut){saveHistory();dragCutRef={cutStart:cut.start,cutEnd:cut.end,mouseX:e.clientX};}
   }
   e.stopPropagation();
 });
