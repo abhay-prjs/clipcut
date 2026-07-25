@@ -91,7 +91,7 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.ctrlKey&&e.code==='KeyB'){e.preventDefault();jlog('key',`${keyStr} → splitAtPlayhead()`);splitAtPlayhead();return;}
-  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)){
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) || e.target.isContentEditable){
     // key eaten by input — log only if it looks like a shortcut that might confuse
     if(e.ctrlKey||e.altKey) jlog('key', `${keyStr} ignored — focus is on ${target}`);
     return;
