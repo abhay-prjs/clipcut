@@ -68,12 +68,17 @@ function renderTranscriptEditor() {
 
   _txWords = el.querySelectorAll('.word-span');
 
-  // Click-to-seek — only fires when no text is being selected
+  // Click-to-seek — only fires when no text is being selected and not mid-edit
   _txWords.forEach(span => {
     span.addEventListener('click', () => {
+      if (span.isContentEditable) return;
       if (window.getSelection().toString().length > 0) return;
       const t = parseFloat(span.dataset.start);
       if (!isNaN(t) && video.src) video.currentTime = t;
+    });
+    span.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      _startEditWord(span);
     });
   });
 
@@ -137,7 +142,52 @@ function _setupTxSelection() {
   });
 }
 
+// Double-click a caption span to fix a mis-transcribed word/phrase in place.
+// Enter or blur commits; Escape reverts. Edits S.captions[].text directly —
+// the timeline caption track and export both read from that same array.
+function _startEditWord(span) {
+  if (span.isContentEditable) return;
+  _hideTxToolbar();
+  const cap = S.captions.find(c => String(c.id) === span.dataset.id);
+  if (!cap) return;
+  const originalText = cap.text;
+
+  span.contentEditable = 'true';
+  span.classList.add('word-editing');
+  span.focus();
+  document.execCommand('selectAll', false, null);
+
+  const finish = commit => {
+    span.contentEditable = 'false';
+    span.classList.remove('word-editing');
+    span.removeEventListener('blur', onBlur);
+    span.removeEventListener('keydown', onKeydown);
+    if (commit) {
+      const newText = span.textContent.trim();
+      if (newText && newText !== originalText) {
+        saveHistory(); // snapshot pre-edit state only when something actually changed
+        cap.text = newText;
+        span.textContent = newText;
+        renderTimeline();
+        toast('✓ Caption updated');
+      } else {
+        span.textContent = originalText; // unchanged or blanked out — revert
+      }
+    } else {
+      span.textContent = originalText; // Escape — revert
+    }
+  };
+  const onBlur = () => finish(true);
+  const onKeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  span.addEventListener('blur', onBlur);
+  span.addEventListener('keydown', onKeydown);
+}
+
 function _onTxMouseUp() {
+  if (document.activeElement && document.activeElement.isContentEditable) return;
   const editor = document.getElementById('transcriptEditor');
   if (!editor || !_txWords) return;
   const sel = window.getSelection();

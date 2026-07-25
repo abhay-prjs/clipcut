@@ -300,6 +300,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .word-span.word-selected{background:var(--blue-dim);}
 .word-span.word-cut{color:var(--red);text-decoration:line-through;opacity:0.55;}
 .word-span.word-search-hit{background:rgba(255,159,10,0.22);color:var(--accent);}
+.word-span.word-editing{background:var(--s2);outline:1.5px solid var(--blue);color:var(--text);cursor:text;}
 #transcriptToolbar{position:fixed;display:none;z-index:9999;background:rgba(28,28,30,.95);backdrop-filter:blur(16px);border:1px solid var(--b2);border-radius:9px;padding:4px 6px;gap:4px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.5);}
 #transcriptToolbar.visible{display:flex;}
 .tx-tool-btn{background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--text);font-size:10.5px;font-family:'Outfit',sans-serif;font-weight:600;cursor:pointer;padding:4px 10px;transition:all .12s;}
