@@ -18,19 +18,20 @@ Restore point snapshots live in `_backups/`. Each folder is a full copy of all s
 ### How to revert to a restore point
 ```bash
 # Replace working files with a snapshot (run from home_editor/)
-cp -r _backups/restore_2026-04-12/js ./js
-cp _backups/restore_2026-04-12/ugc-editor-v2.html .
-cp _backups/restore_2026-04-12/editor.css .
-cp _backups/restore_2026-04-12/serve.py .
-cp _backups/restore_2026-04-12/waveform.worker.js .
+cp -r _backups/restore_2026-07-26/js ./js
+cp _backups/restore_2026-07-26/clipcut.html .
+cp _backups/restore_2026-07-26/clipcut.css .
+cp _backups/restore_2026-07-26/serve.py .
+cp _backups/restore_2026-07-26/waveform.worker.js .
 ```
+(Snapshots older than 2026-07-26 predate the clipcut.html/clipcut.css rename and still contain ugc-editor-v2.html/editor.css instead — check the folder contents before copying.)
 
 ### When to create a new restore point (MANDATORY)
 **Before starting any non-trivial change**, create a new dated snapshot:
 ```bash
 mkdir -p _backups/restore_YYYY-MM-DD
 cp -r js _backups/restore_YYYY-MM-DD/js
-cp ugc-editor-v2.html editor.css serve.py waveform.worker.js _backups/restore_YYYY-MM-DD/
+cp clipcut.html clipcut.css serve.py waveform.worker.js _backups/restore_YYYY-MM-DD/
 ```
 - One snapshot per session/day is enough — don't spam them
 - Never edit files inside `_backups/` — they are read-only references
@@ -51,15 +52,15 @@ not a general purpose editor.
 
 ## File Structure
 home_editor/
-├── ugc-editor-v2.html      # HTML structure only
-├── editor.css              # All styles
+├── clipcut.html            # HTML structure only
+├── clipcut.css             # All styles
 ├── editor.js               # LEGACY MONOLITH — kept as backup, not loaded by HTML
 ├── waveform.worker.js      # OffscreenCanvas Web Worker — owns both waveform canvas contexts
 ├── serve.py                # pywebview desktop app — HTTP server + Python API (NO Flask)
 ├── whisper_server.py       # UNUSED — kept for reference only (Flask was removed)
 ├── config.json             # API keys and settings (never commit)
 ├── CLAUDE.md               # This file
-└── js/                     # Split JS modules — loaded in order by ugc-editor-v2.html
+└── js/                     # Split JS modules — loaded in order by clipcut.html
     ├── core/
     │   ├── logger.js       # jlog(), window.onerror, console.error override — LOAD FIRST
     │   ├── state.js        # S object, _clipRegistry, video/ph/tArea DOM refs — LOAD SECOND
@@ -86,7 +87,7 @@ home_editor/
     │   └── settings.js     # loadSettings(), saveSettings(), toggleSetting(), setCombineMode(), updateSettingsUI()
     └── main.js             # Init: renderTimeline(), loadConfig(), loadSettings(), FFmpeg shim, welcome toast
 
-### Script load order in ugc-editor-v2.html
+### Script load order in clipcut.html
 ```
 js/core/logger.js       ← must be first (jlog used everywhere)
 js/core/state.js        ← must be second (S, video, ph, tArea used everywhere)
@@ -418,7 +419,7 @@ Every detected issue uses this shape — do NOT deviate:
 - `renderTimeline()` — redraws entire timeline. ALWAYS re-appends playhead (`ph`) as last child of `tracksInner` at end
 - `buildRuler(totalDur, totalW, zoom)` — renders ruler ticks and markers
 - `snapGaps()` — recalculates timelineStart for all segments to close gaps
-- `renderClipList()` — renders clip library in Media tab
+- `renderClipList()` — renders `#clipList` as a `.clip-grid` of thumbnail cards (duration badge, hover delete calling `deleteClipById(id)`)
 - `handleTLClick(e)` — maps timeline pixel position to source time via segment offsets (NOT raw `x/zoom`); critical after trim ops
 - `zoomTL(d)` — adjusts S.zoom and re-renders
 
@@ -427,9 +428,12 @@ Every detected issue uses this shape — do NOT deviate:
 
 **js/ui/ui.js**
 - `toast(msg)` — shows toast notification
-- `switchTab(name)` — switches left panel tab; calls `_loadWhisperConfigFromServer()` when switching to 'settings'
+- `switchTab(name)` — switches left panel tab; matches `.panel-tab` elements by `data-tab` attribute (not position); calls `_loadWhisperConfigFromServer()` when switching to 'settings'
+- `switchInspTab(name)` — switches right-panel inspector tab (Video/Speed/Captions); matches `.insp-tab`/`.insp-panel` by `data-insp` — deliberately separate from `switchTab()`, do not merge them or give inspector tabs the `.panel-tab` class
+- `syncTopbarClipName()` — writes `S.current?.name` (or "No clip loaded") into `#topbarClipName`; call after any clip select/delete/undo-restore
 - `openModal(id)` / `closeModal(id)` — modal open/close
-- `deleteClip()`, `setAspect()`, `addMarker()`, `toggleLoop()`, `toggleSkipCuts()`, `toggleScriptPart()`, `toggleCutSkip()`
+- `deleteClip()` — deletes `S.selectedClipId||S.current`; `deleteClipById(id)` sets `S.selectedClipId=id` first then delegates to it (used by the Media grid's hover delete icon)
+- `setAspect()`, `addMarker()`, `toggleLoop()`, `toggleSkipCuts()`, `toggleScriptPart()`, `toggleCutSkip()`
 - Keyboard shortcut handler (Space, arrows, Q/W/H/V, Ctrl+Z, Delete, +/-)
 - Body drag-drop handler
 
@@ -491,18 +495,27 @@ if (window.pywebview?.state) window.pywebview.state.segments = S.segments;
 Keeps Python-side state in sync for potential future native features.
 
 ## UI Layout Changes (vs original)
-- **Topbar:** Select, Trim mode, Split, Trim Before, Trim After buttons REMOVED from topbar
-- **Timeline header row:** now contains: `↖ Select · ✂ Trim · ⊘ Split | ◁ Trim Before · Trim After ▷ | ↯ Snap · ⊞ Snap Gaps | 👁 Silence`
-- **Media tab:** upload zone `onclick` → `onUploadZoneClick()`. No separate native open button.
-- **Captions tab:** port input + Ping button replaced with single `⚡ Load Whisper Model` button
+Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured to a CapCut-style layout scoped to only the features ClipCut actually has:
+- **Topbar:** Logo (no dropdown) · icon-only `.action-cluster` pill (Import/Undo/Redo/Mark/Delete, tooltips via `title=`) · centered `#topbarClipName` readout (live clip name, synced by `syncTopbarClipName()` in `js/ui/ui.js` — called from `selectClip()`, `deleteClip()`, and `_applySnapshot()` undo/redo restore) · config status pills (icon-only ✓/✗, no text) · timecode · AI Chat icon · Settings gear · Export button (label kept)
+- **Left panel:** horizontal `.panel-tabs` replaced by a vertical `.icon-rail` (Media/Captions/Silence/AI Tools, icon above label). `switchTab(name)` in `js/ui/ui.js` matches on `t.dataset.tab===name` (NOT positional index — do not add/reorder `.panel-tab` elements without keeping `data-tab` attributes in sync)
+- **Media tab:** slim `.upload-zone.slim` "+ Import Media" button (still calls `onUploadZoneClick()`, still drag-droppable via the body-level handler) · Auto/Deep pipeline buttons (`id="autoModeBtn"`/`id="autoModeDeepBtn"` — **required**, `runAutoMode()` reads `btn.textContent` with no null guard) · `#clipList` is now a `.clip-grid` (2-col thumbnail cards with duration badge + hover delete via `deleteClipById(id)`, not a row list)
+- **Silence tab:** "✦ Open AI Silence Studio" button (`openSilenceModal()`) added at top — real modal, backed by `analyzeAudio()`/`runAIAnalysis()`/`applySilenceRemoval()`
+- **Captions tab:** unchanged content. Do NOT add a modal-launcher button here — `openCaptionAI()` was removed because it was dead (just toasted "use the Transcribe button"); `generateAICaptions()` is a legacy stub kept only because the (unreachable) `#captionModal`'s Generate button still calls it
+- **Right panel (inspector):** flat stacked sections replaced by tabs — `.insp-tabs`/`.insp-tab`/`.insp-panel`, switched via `switchInspTab(name)` (namespaced separately from `switchTab()` on purpose — they used to share `.panel-tab` and each call was wiping the other's active state)
+  - **Video** tab: Clip Info (now wrapped in `.info-card`) + Flip
+  - **Speed** tab: Rate select
+  - **Captions** tab: full caption style block (font/weight/layout/size/color/stroke/position)
+  - **Export** section stays outside the tabs (persistent footer) — cross-cutting, not clip-specific
+- **Timeline toolbar:** flat row of individual pills (Select/Trim/Split/Trim Before/Merge Cuts/Trim After/Silence, then Snap/Snap Gaps) — no longer grouped in a boxed tray
+- **Playback bar:** wrapped in a floating `.pb-pill` capsule instead of a flat full-width strip
 - **Export modal:** Save folder row removed (native Save dialog handles folder+filename)
 
-## Tab Structure — Left Panel
-**Media tab:** video import (click or drag-drop), clip library, silence cuts list
+## Tab Structure — Left Panel (icon rail)
+**Media tab:** slim import button, Auto/Deep buttons, clip library grid (2-col thumbnails)
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
-**Silence tab:** threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only)
-**AI tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
-**Settings tab (⚙):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · Reset to Defaults
+**Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only)
+**AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
+**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · Reset to Defaults
 
 ## Auto Mode & Deep AI Mode
 `runAutoMode(deep)` in `js/detection/silence.js` — all steps gated by `S.settings` flags:
@@ -611,26 +624,29 @@ Segment boundary threshold: `0.05s` (tight — rVFC is called every frame, not e
 - [ ] AE plugin version (future project)
 
 ## Design System
+Apple-style dark theme (reskinned 2026-07-26 — see `git log clipcut.css` for the prior "rusty" v1 palette if ever needed):
 ```css
---bg: #08090f
---s1: #0d0f1a      /* panels, topbar */
---s2: #111320      /* cards, inputs */
---s3: #171a2e      /* hover states */
---s4: #1d2038      /* deep inset */
---b1: #1e2240      /* primary borders */
---b2: #242848      /* secondary borders */
---blue: #3d7fff    /* primary accent */
---blue-soft: #6b9fff
---blue-dim: rgba(61,127,255,0.13)
---accent: #c8ff47  /* trim handles only */
---red: #ff5461     /* cuts, delete, dead_air */
---teal: #38e8c8    /* captions, waveform, whisper */
---text: #e8eaf8
---text2: #7880a8
---text3: #3d4468
+--bg: #151517
+--s1: rgba(28,28,30,.85)   /* panels, topbar — paired with backdrop-filter:blur(20px) */
+--s2: rgba(255,255,255,.045) /* cards, inputs */
+--s3: rgba(255,255,255,.08)  /* hover states */
+--s4: rgba(255,255,255,.12)  /* deep inset */
+--b1: rgba(255,255,255,.08)  /* primary borders */
+--b2: rgba(255,255,255,.14)  /* secondary borders */
+--blue: #0A84FF     /* primary accent */
+--blue-soft: #409CFF
+--blue-dim: rgba(10,132,255,.14)
+--accent: #FF9F0A   /* trim handles only */
+--green: #30D158    /* config status "ok" pills */
+--red: #FF453A      /* cuts, delete, dead_air */
+--teal: #64D2FF     /* captions, waveform, whisper */
+--text: #f5f5f7
+--text2: rgba(255,255,255,.55)
+--text3: rgba(255,255,255,.32)
 ```
-Fonts: Outfit (UI) + JetBrains Mono (mono/timecodes)
+Fonts: Outfit (UI) + JetBrains Mono (mono/timecodes) — kept as-is through the reskin, not swapped for SF Pro
 Target resolution: 1920×1080 at 100% browser zoom
+Panels/topbar/timeline/playback-bar use `backdrop-filter: blur(20px)` translucency; buttons are pill/rounded (7–14px radius) rather than the old 3–5px flat rectangles
 
 ## Hardware Context
 - CPU: Ryzen 5 7600X

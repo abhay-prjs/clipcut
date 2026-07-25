@@ -1,6 +1,14 @@
 # Changelog
 Format: `date · file · what changed`
 
+- 2026-07-26 · CLAUDE.md · updated to reflect the Apple-style reskin + CapCut-style shell restructure: file renames (ugc-editor-v2.html/editor.css → clipcut.html/clipcut.css), new icon-rail nav, tabbed inspector, new functions (syncTopbarClipName, switchInspTab, deleteClipById), new design tokens
+- 2026-07-26 · clipcut.html + js/ui/ui.js · restructured shell to icon-rail nav (Media/Captions/Silence/AI Tools) + tabbed right inspector (Video/Speed/Captions); switchTab() refactored from positional index matching to data-tab attribute matching; added switchInspTab(), syncTopbarClipName(), deleteClipById()
+- 2026-07-26 · js/timeline/timeline.js · renderClipList() switched from row list to 2-col thumbnail grid with duration badge + hover delete
+- 2026-07-26 · clipcut.css + clipcut.html · full Apple-style dark reskin (palette, blur, pill buttons, rounded corners) — see updated Design System section in CLAUDE.md
+- 2026-07-26 · js/ui/ui.js · fixed critical regression: icon-rail restructure had dropped id="autoModeBtn"/id="autoModeDeepBtn", causing runAutoMode() to throw on click (reads btn.textContent with no null guard) — restored
+- 2026-07-26 · js/playback/playback.js · toggleFlip() now toggles 'active' class on #flipH/#flipV buttons — previously flipped the video with zero visual feedback on the buttons
+- 2026-07-26 · js/core/history.js, js/captions/captions.js, js/timeline/trim.js, js/captions/whisper.js, js/detection/silence.js, js/media/export.js, clipcut.css · removed dead code found during audit: updateSilenceList() (targeted non-existent #silenceList, always no-op), dead .caption-item queries in updateCaptionOverlay() (ran every video frame for no effect), dead .trsh/.trin querySelectors in trim.js drag handler, orphaned openCaptionAI()/saveApiKey(), unused CSS (.caption-item family, .silence-item family, .sil-result-item's dead nested selectors, .api-key-row, .video-container.flip-h/v/hv), 9 stray console.log debug traces
+
 - 2026-04-26 · js/captions/captions.js + whisper.js · gapless SRT: frame-snapping (_snapToFrame), sentence-boundary chunking (_chunkWordsByPunct), strict-mode end=next-start, integer-ms fmtTime, 50ms lead-in — fixes CapCut gaps and overlay timing
 - 2026-04-20 · js/core/history.js · _applySnapshot: stop rVFC + reset S.playing before restoring video.src so Space plays correctly after undo/redo; clear stale video handlers; add onerror/onloadedmetadata + prop panel update
 - 2026-04-12 · serve.py · vad_detect: replaced read_audio() with stdlib wave+numpy to fix torchcodec DLL crash
