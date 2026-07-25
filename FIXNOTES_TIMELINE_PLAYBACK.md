@@ -285,6 +285,34 @@ mess). Targeted fix, zoom-aware:
   (`timeline.js:206`) they use raw source time and go stale after snap, same bug
   family as C1.
 
+### C5. Addendum — confirmed from live screenshot (36s clip, ~50 px/s zoom)
+
+A screenshot of the real timeline (single 36.25s segment, no cuts applied) revises
+C4 and adds two findings:
+
+1. **Word-chunk caption blocks are unreadable at *any* normal zoom, not just low
+   zoom.** At ~50 px/s a 2-word chunk is 0.4–0.6s ≈ 20–30px; the forced 30px
+   min-width makes every chip overlap its neighbour → a solid shingled wall of
+   ~70 chips for a 36s clip. Revision to C4: **sentence-level blocks are the
+   default**; word-level blocks only appear above ~150 px/s; the merged solid
+   strip kicks in below ~30 px/s.
+2. **Every chip renders a 💬 emoji prefix** (`timeline.js:209`) — repeated ~70×,
+   it consumes roughly half of each chip's width and adds pure noise. Delete it;
+   the lane label "CAPTIONS" already says what the track is.
+3. **Captions are colored RED** — `.tl-clip.caption` (`clipcut.css:263`) uses
+   `--red` rgba fills. The design system itself defines teal = captions and
+   red = cuts/delete. A transcript track full of red chips reads as "70 errors",
+   which is a large share of the perceived mess even before any cut overlays
+   exist. Enforce fixed color semantics across the whole timeline:
+   **blue = video segments · teal = speech/captions · red = cuts only ·
+   orange = trim handles · `--tl-highlight` teal-green = keep zones.**
+   (Fold into the C2 token table: `--tl-cap-fill:#0E3F4A; --tl-cap-border:#64D2FF;
+   --tl-cap-text:#A8E6FF;` — solid, teal family.)
+
+The video track and waveform lanes look fine in the screenshot — the redesign
+effort should be weighted: caption lane first, cut rendering second, segment
+styling last.
+
 ---
 
 ## PART D — FULL TARGETED BUG LIST
