@@ -15,9 +15,9 @@
   <button class="tool-btn ai-btn" onclick="openSilenceModal()">✦ AI Silence</button>
   <button class="tool-btn ai-btn" onclick="openCaptionAI()">✦ AI Captions</button>
   <div class="dv"></div>
-  <button id="autoModeBtn" onclick="runAutoMode(false)" class="tbtn" style="border-color:rgba(61,127,255,.35);color:var(--blue-soft);">⚡ Auto</button>
+  <button id="autoModeBtn" onclick="runAutoMode(false)" class="tbtn" style="background:var(--blue-dim);color:var(--blue-soft);">⚡ Auto</button>
   <button id="autoModeDeepBtn" onclick="runAutoMode(true)" class="tbtn ai">✦ Deep</button>
-  <div id="cutBadge" style="font-size:9px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(255,84,97,.15);border:1px solid rgba(255,84,97,.3);color:#ff5461;display:none">0 cuts</div>
+  <div id="cutBadge" style="font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:4px 8px;border-radius:6px;background:rgba(255,69,58,.15);border:1px solid rgba(255,69,58,.3);color:var(--red);display:none">0 cuts</div>
   <div class="dv"></div>
   <button class="tool-btn" onclick="undo()">↺ Undo</button>
   <button class="tool-btn" onclick="redo()">↻ Redo</button>
@@ -553,7 +553,7 @@
     <div style="height:42px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--b1);gap:8px;flex-shrink:0">
       <span style="font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">AI Editor</span>
       <div style="flex:1"></div>
-      <div id="chatModelBadge" style="font-size:8px;font-family:'JetBrains Mono',monospace;color:var(--blue-soft);background:var(--blue-dim);border:1px solid rgba(61,127,255,.2);padding:2px 6px;border-radius:3px;white-space:nowrap;overflow:hidden;max-width:120px;text-overflow:ellipsis">no model</div>
+      <div id="chatModelBadge" style="font-size:8px;font-family:'JetBrains Mono',monospace;color:var(--blue-soft);background:var(--blue-dim);border:1px solid rgba(10,132,255,.2);padding:3px 7px;border-radius:6px;white-space:nowrap;overflow:hidden;max-width:120px;text-overflow:ellipsis">no model</div>
       <button class="tbtn" style="height:18px;font-size:8px" onclick="clearChat()">Clear</button>
     </div>
 
@@ -599,7 +599,7 @@
   <!-- Actions -->
   <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="trimBefore()" title="Q">◁ Before</button>
   <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="trimAfter()"  title="W">After ▷</button>
-  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0;color:var(--accent);border-color:rgba(200,255,71,.3)" onclick="applyTrim()">✓ Apply</button>
+  <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0;color:var(--accent);background:var(--accent-dim)" onclick="applyTrim()">✓ Apply</button>
   <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="resetTrim()">↺ Reset</button>
 </div>
 
