@@ -230,10 +230,10 @@ function toggleFlip(d){
 function _deduplicateCuts(cuts){
   if(cuts.length < 2) return cuts;
   const sorted = [...cuts].sort((a, b) => a.start - b.start);
-  const out = [sorted[0]];
+  const out = [{...sorted[0]}];
   for(let i = 1; i < sorted.length; i++){
     const prev = out[out.length - 1];
-    const cur  = sorted[i];
+    const cur  = {...sorted[i]};
     const overlap = Math.min(prev.end, cur.end) - Math.max(prev.start, cur.start);
     if(overlap > 0){
       const shorter = Math.min(prev.end - prev.start, cur.end - cur.start);
