@@ -361,26 +361,26 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 
 | # | Sev | Where | Bug | Targeted fix |
 |---|-----|-------|-----|--------------|
-| 1 | ☠ | `js/ui/ui.js:94` | Keyboard handler ignores contentEditable — typing in the transcript word editor fires Q/W/H/V/Space → trims, flips, play-toggles while typing ("what" = trimAfter + flips) | Add `e.target.isContentEditable` to the early-return guard |
-| 2 | ☠ | `js/detection/silence.js:459` | `applyCuts()` wipes `S.captions=[]`. Captions store source timestamps; overlay & `exportCaptions()` already remap through segments — the wipe forces a full re-transcribe after every apply for no reason | Delete the wipe (and the `S.chatHistory=[]` wipe if chat context rebuilds from captions). Keep captions; they remain valid |
-| 3 | ☠ | `js/playback/playback.js:230` | `_deduplicateCuts` mutates the real cut objects in `S.cuts` (`prev.end = Math.max(...)`) — every `buildPlaySegments()` can permanently widen detected cuts | Copy before merging: `const out=[{...sorted[0]}]` and push `{...cur}` |
+| 1 | ☠ | ~~`js/ui/ui.js:94`~~ | ✅ FIXED (098dbdb) | Keyboard handler ignores contentEditable — typing in the transcript word editor fires Q/W/H/V/Space → trims, flips, play-toggles while typing ("what" = trimAfter + flips) |
+| 2 | ☠ | ~~`js/detection/silence.js:459`~~ | ✅ FIXED (e1e1e04) | `applyCuts()` wiped `S.captions=[]`/`S.chatHistory=[]` unnecessarily — deleted the wipe |
+| 3 | ☠ | ~~`js/playback/playback.js:230`~~ | ✅ FIXED (633defd) | `_deduplicateCuts` mutated the real cut objects in `S.cuts` — now copies before merging |
 | 4 | ● | `js/timeline/timeline.js:185` | Unselected-cut ghosts render at raw source coords with no `!S.snapped` guard and no mapping — the post-apply "soup" (see Part C1) | Map via `sourceTimeToTimeline()`, skip nulls |
 | 5 | ● | `js/timeline/timeline.js:120`, `:206` | Selected cuts & caption blocks positioned by raw `t*zoom` — wrong after any trim shifts timelineStart | Same mapping fix as #4 |
 | 6 | ● | `js/ui/ui.js:106` + everywhere | **No way to delete a segment.** Split (Ctrl+B) exists, but Delete handles cuts/findings/clips only — the universal "split → delete bad half" flow is impossible | Add `deleteSegment()`: remove from `S.segments`, recompute `timelineStart` chain, `saveHistory` → `buildPlaySegments` → `sliceWaveforms` → `renderTimeline`; wire into Delete-key branch when `S.selectedSegmentId` set |
-| 7 | ● | `serve.py:1243,1248` | Native menu calls `deleteSelectedCut()` / `zoomToFit()` — neither exists in JS → menu items throw | Implement both (zoomToFit logic already exists in the dblclick handler `timeline.js:344`) or point menu at existing fns |
+| 7 | ● | ~~`serve.py:1243,1248`~~ | ✅ FIXED (9cfa04a) | Native menu called `deleteSelectedCut()`/`zoomToFit()` — extracted both into named JS functions shared with keydown/dblclick handlers |
 | 8 | ● | — (absent) | **No project save/load.** Everything (cuts, captions, segments, styles) dies with the window. CLAUDE.md even documents a "Save Project" menu that doesn't exist | Serialize the same object `_makeSnapshot()` already builds + sourcePaths → JSON via pywebview save/open dialogs; add 30s autosave to a temp file + startup recovery prompt |
-| 9 | ● | `js/timeline/trim.js:77` | Cut-handle drag multiplies delta by 0.5 — handle moves half the mouse distance, feels broken | Remove the factor; if fine-drag wanted, make Shift = 0.25× |
+| 9 | ● | ~~`js/timeline/trim.js:77`~~ | ✅ FIXED (a20bea4) | Cut-handle drag multiplied delta by 0.5 — removed the factor |
 | 10 | ● | `js/captions/captions.js` (styling fns) | All caption styling is inline DOM styles on `#captionOverlay` — not in `S`, not in undo, not persisted, **not passed to export** → burned-in output ignores everything you styled | Introduce `S.textStyle` / `S.textLayers[]` as source of truth (prereq for templates & drag-in-preview; see previous audit) — then generate an **ASS** file from it for burn-in (`subtitles=` filter renders ASS natively; carries font/size/color/outline/position) |
 | 11 | ● | `js/media/export.js:425–450` vs `captions.js:307` | Two SRT/VTT exporters: `exportCaptions()` (correct, cut-remapped) and legacy `exportSRT()/exportVTT()` (raw timestamps). Whichever the UI wires, one produces drifted subs after cuts | Delete the legacy pair; alias names to `exportCaptions('srt'/'vtt')` |
 | 12 | ○ | `js/captions/captions.js:8` | `_captionFps` hardcoded 30 — frame-snapping wrong for 24/25/60fps footage | Probe real fps at import (ffprobe already used for duration) and store on the clip |
 | 13 | ○ | `js/timeline/timeline.js:273` | `handleTLClick` in a pre-snap gap resolves to *last* segment's end (assignment inside loop) instead of nearest boundary | Compute nearest boundary of the gap |
-| 14 | ○ | `js/timeline/trim.js:145` | Marquee select iterates `S.clips` using `clip.timelineStart` which nothing sets — dead multi-clip remnant | Delete, or repoint at `S.segments` |
+| 14 | ○ | ~~`js/timeline/trim.js:145`~~ | ✅ FIXED (48bd3e9) | Marquee select iterated `S.clips` using `clip.timelineStart` which nothing sets — dead selection logic removed, marquee box + click-suppression kept |
 | 15 | ○ | `js/timeline/trim.js:25` + `updateTrimUI` | Trim bar and its playhead map by `t/S.duration` — visually wrong after cuts/snap | Map through playSegments, or explicitly label the bar "source" |
-| 16 | ○ | `js/playback/playback.js:62` | `skipTime()` can land inside removed cuts → double-jump | Clamp through playSegments |
+| 16 | ○ | ~~`js/playback/playback.js:62`~~ | ✅ FIXED (8d3f169) | `skipTime()` could land inside removed cuts → double-jump — now clamps through playSegments |
 | 17 | ○ | `js/media/export.js:171–301` + `whisper.js:7` | Entire Flask export path (`_doFlaskExport`, SSE, `getWhisperBase`) is dead per your own architecture (Flask removed) — ~200 lines of confusion | Delete; `startExport` routes pywebview-only, error toast otherwise |
-| 18 | ○ | `js/ui/ui.js:196–197` | `toggleCutSkip` calls `renderAllFindings()` twice | Remove dup |
+| 18 | ○ | ~~`js/ui/ui.js:196–197`~~ | ✅ FIXED (5f12cdc) | `toggleCutSkip` called `renderAllFindings()` twice — removed dup |
 | 19 | ○ | `CLAUDE.md` | File-structure section says `home_editor/`; files live at repo root — misleads future sessions | Update doc |
-| 20 | ● | `js/timeline/trim.js:159` | Cut-edge drag (trim bar) commits without `saveHistory()` — resizing a cut is not undoable | Snapshot once at drag *start* (mousedown) or on pointerup before commit; also applies to the new on-timeline drag (§C6) |
+| 20 | ● | ~~`js/timeline/trim.js:159`~~ | ✅ FIXED (801713e) | Cut-edge drag (trim bar) committed without `saveHistory()` — now snapshots at mousedown; on-timeline drag (§C6) still needs the same treatment when built |
 | 21 | ● | `js/ui/ui.js:39` (`setAspect`) + `serve.py` export | **Aspect ratio is preview-only** — `setAspect()` just sets CSS `aspect-ratio` on `#videoContainer`; `export_video()` never receives it, so a "9:16" edit exports at the source aspect. WYSIWYG lie #2 (after caption styles) | Store choice in `S.aspect` (state, history, project file). Pass to `export_video()`; in ffmpeg insert one stage before encode: crop-to-fill `crop=ih*9/16:ih` (default, what CapCut does) or pad-to-fit `scale=...:force_original_aspect_ratio=decrease,pad=...` — user picks crop/pad in export modal. Preview box already matches, so no UI change beyond the toggle |
 | 22 | ● | `js/core/state.js` + `js/media/import.js:122` (`selectClip`) | **Edit state is global, not per-clip** — `S.cuts`, `S.captions`, `S.waveformData`, markers all live on `S` only; `selectClip()` swaps segments but wipes/keeps the rest, so switching clips loses or cross-contaminates detections and transcripts. Hard blocker for batch export (F3) and even basic multi-clip use | Mirror the `clip.segments` pattern: on `selectClip`, persist `S.cuts/captions/markers/waveformData/trimIn/trimOut` back onto the *outgoing* clip object, then load the incoming clip's copies (defaulting empty). `_makeSnapshot()` already snapshots clips — per-clip fields ride along in undo and the future project file for free |
 
@@ -388,7 +388,7 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 
 ## PART E — IMPLEMENTATION ORDER
 
-**Phase 1 — stop the bleeding (½ day)**
+**Phase 1 — stop the bleeding (½ day)** ✅ DONE — #1, #2, #3, #7, #9, #14, #16, #18, #20 all fixed and pushed (commits 098dbdb..48bd3e9).
 Bugs #1, #3, #18 (one-liners) · #2 (delete one line) · #9 (delete a factor) · #7 (wire menu).
 
 **Phase 2 — timeline correctness + visuals (1–2 days)**
