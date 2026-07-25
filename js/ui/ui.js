@@ -194,6 +194,5 @@ function toggleCutSkip(cutId){
   buildPlaySegments();
   renderTimeline();
   renderAllFindings();
-  renderAllFindings();
   toast(cut.skipEnabled!==false?'⊘ Skipping cut':'● Keeping cut in playback');
 }
