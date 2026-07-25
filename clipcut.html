@@ -651,13 +651,15 @@
   <div class="tl-body">
     <div class="track-labels">
       <div style="height:20px;border-bottom:1px solid var(--b1)"></div>
+      <div style="height:8px;border-bottom:1px solid var(--b1)"></div>
       <div class="track-label"><span class="dot" style="background:var(--blue)"></span>Video</div>
       <div class="waveform-label"><span class="dot" style="background:var(--teal)"></span>Wave</div>
-      <div class="track-label"><span class="dot" style="background:var(--red)"></span>Captions</div>
+      <div class="track-label"><span class="dot" style="background:var(--tl-cap-border)"></span>Captions</div>
     </div>
     <div class="tracks-area" id="tracksArea">
       <div class="tracks-inner" id="tracksInner">
         <div class="ruler" id="ruler"></div>
+        <div class="suggestion-strip" id="suggestionStrip"></div>
         <div class="track-row" id="videoTrack"></div>
         <div class="waveform-row" id="waveformRow"><canvas id="tlWaveCanvas"></canvas></div>
         <div class="track-row" id="captionTrack"></div>

@@ -556,9 +556,7 @@ function selectCut(cutId){
   const cut=S.cuts.find(c=>c.id===cutId);
   if(!cut) return;
   // highlight fill element
-  document.querySelectorAll('.cut-fill').forEach(el=>{el.style.outline='none';el.style.zIndex='3';});
-  const fillEl=document.querySelector(`[data-cut-id="${cutId}"]`);
-  if(fillEl){fillEl.style.outline='2px solid #fff';fillEl.style.zIndex='6';}
+  document.querySelectorAll('.tl-cut').forEach(el=>el.classList.toggle('cut-selected',el.dataset.cutId===cutId));
   // load into trim panel — do NOT write to S.trimIn/S.trimOut (clip-level trim state)
   // updateTrimUI() reads cut.start/end via S.selectedCutId when a cut is selected
   updateTrimUI();

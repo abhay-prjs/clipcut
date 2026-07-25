@@ -30,6 +30,40 @@ function _chunkWordsByPunct(words, maxWords) {
   return chunks;
 }
 
+// Merge adjacent captions (gap < 0.3s) into a single continuous {start,end}
+// span with no text — the low-zoom timeline caption strip (Part C4/C5).
+function _mergeCaptionsIntoStrip(caps){
+  if(!caps.length) return [];
+  const sorted=[...caps].sort((a,b)=>a.start-b.start);
+  const out=[{start:sorted[0].start,end:sorted[0].end}];
+  for(let i=1;i<sorted.length;i++){
+    const prev=out[out.length-1], cur=sorted[i];
+    if(cur.start-prev.end<0.3) prev.end=Math.max(prev.end,cur.end);
+    else out.push({start:cur.start,end:cur.end});
+  }
+  return out;
+}
+
+// Group adjacent word-chunk captions into sentence-level blocks (closes on
+// .!? or a >1s gap) — the default mid-zoom timeline caption granularity.
+function _groupCaptionsIntoSentences(caps){
+  const sorted=[...caps].sort((a,b)=>a.start-b.start);
+  const groups=[]; let cur=null;
+  for(const c of sorted){
+    if(!cur || c.start-cur.end>1){
+      if(cur) groups.push(cur);
+      cur={start:c.start,end:c.end,text:c.text};
+    } else {
+      cur.end=c.end;
+      cur.text+=' '+c.text;
+    }
+    const last=(cur.text||'').trim().slice(-1);
+    if(last==='.'||last==='!'||last==='?'){ groups.push(cur); cur=null; }
+  }
+  if(cur) groups.push(cur);
+  return groups;
+}
+
 function buildDemoCaptions(dur){
   const lines=["Welcome back to the channel!","Today's content is gonna be crazy.","I literally couldn't believe this worked.","Step one — let me break it down for you.","No cap this is the best one yet.","Make sure you stick around till the end.","Drop a comment if this helped you out.","Like and subscribe for more content!"];
   const seg=dur/Math.min(lines.length,Math.ceil(dur/3));

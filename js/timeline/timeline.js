@@ -51,38 +51,23 @@ function renderTimeline(){
   });
 
   // ── CUTS ────────────────────────────────────────────────────
+  // Solid per-type colors (Part C2) — one element per cut, no rgba stacking.
+  const _cutTypeColor={
+    dead:'var(--tl-cut-dead)', filler:'var(--tl-cut-filler)', retake:'var(--tl-cut-retake)',
+    dead_air:'var(--tl-cut-dead)', weak:'var(--tl-cut-weak)',
+  };
+  const _cutTypeLabel={
+    dead:'✕ dead', filler:'✕ filler', retake:'✕ retake', dead_air:'✕ silence', weak:'? weak',
+  };
+  const ss=document.getElementById('suggestionStrip'); ss.innerHTML='';
   if(S.silenceVisible){
-    const _cutColors={
-      dead:      {bg:'rgba(255,84,97,.35)',   line:'#ff5461', label:'✕ dead'},
-      filler:    {bg:'rgba(167,139,250,.35)', line:'#a78bfa', label:'✕ filler'},
-      retake:    {bg:'rgba(255,84,97,.5)',    line:'#ff0000', label:'✕ retake'},
-      dead_air:  {bg:'rgba(255,140,0,.35)',   line:'#ff8c00', label:'✕ silence'},
-      weak:      {bg:'rgba(250,204,21,.3)',   line:'#facc15', label:'? weak'},
-      highlight: {bg:'rgba(56,232,200,.18)',  line:'#38e8c8', label:'✦ best'},
-    };
-    const _pendColors={
-      dead:      {bg:'rgba(255,84,97,.10)',   border:'rgba(255,84,97,.3)',   label:'✕'},
-      filler:    {bg:'rgba(167,139,250,.10)', border:'rgba(167,139,250,.3)', label:'f'},
-      retake:    {bg:'rgba(255,84,97,.15)',   border:'rgba(255,84,97,.4)',   label:'R'},
-      dead_air:  {bg:'rgba(255,140,0,.10)',   border:'rgba(255,140,0,.3)',   label:'…'},
-      weak:      {bg:'rgba(250,204,21,.08)',  border:'rgba(250,204,21,.25)', label:'?'},
-      highlight: {bg:'rgba(56,232,200,.10)',  border:'rgba(56,232,200,.35)', label:'✦'},
-    };
-
-    // Clear stale waveform-row overlays (keep the canvas element)
-    const wr=document.getElementById('waveformRow');
-    Array.from(wr.children).forEach(el=>{if(el.id!=='tlWaveCanvas') wr.removeChild(el);});
-
-    // Highlights → always-visible teal "keep" zones (rendered before cut zones)
+    // Highlights → thin top bar on the video track, not a full-height wash
     S.cuts.filter(c=>c.type==='highlight').forEach(cut=>{
-      // Map source timestamps to timeline positions — handles snapped/cut timelines
       const tlStart = sourceTimeToTimeline(cut.start);
       const tlEnd   = sourceTimeToTimeline(cut.end);
-      // Skip if both endpoints fall in removed regions or beyond the timeline
       if(tlStart === null && tlEnd === null) return;
       const safeStart = tlStart ?? sourceTimeToTimeline(cut.start + 0.05) ?? 0;
       const safeEnd   = tlEnd   ?? sourceTimeToTimeline(cut.end   - 0.05) ?? safeStart + (cut.end - cut.start);
-      // Clamp to actual timeline duration so nothing overflows
       const clampedStart = Math.max(0, Math.min(safeStart, totalDur));
       const clampedEnd   = Math.max(0, Math.min(safeEnd,   totalDur));
       if(clampedEnd <= clampedStart) return;
@@ -90,31 +75,22 @@ function renderTimeline(){
       const left  = clampedStart * zoom;
       const width = Math.max((clampedEnd - clampedStart) * zoom, 6);
 
-      const fill=document.createElement('div');
-      fill.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:${width}px;background:rgba(56,232,200,.12);border-top:2px solid rgba(56,232,200,.6);border-bottom:2px solid rgba(56,232,200,.6);z-index:5;pointer-events:all;cursor:pointer;`;
-      fill.dataset.cutId=cut.id;
-      fill.title=`✦ Best Part · ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
-      fill.addEventListener('click',e=>{
+      const bar=document.createElement('div');
+      bar.className='tl-highlight-bar';
+      bar.style.left=left+'px'; bar.style.width=width+'px';
+      bar.dataset.cutId=cut.id;
+      bar.title=`✦ Best Part · ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
+      bar.addEventListener('click',e=>{
         e.stopPropagation();
         S.selectedCutId=cut.id;
         S.selectedSegmentId=null;
         if(video.src) video.currentTime=cut.start;
         toast(`✦ Highlight · ${cut.start.toFixed(2)}s → ${cut.end.toFixed(2)}s`);
       });
-      vt.appendChild(fill);
-      if(width>30){
-        const lbl=document.createElement('div');
-        lbl.style.cssText=`position:absolute;top:50%;left:${left+4}px;transform:translateY(-50%);font-size:8px;font-weight:700;color:#38e8c8;white-space:nowrap;z-index:8;pointer-events:none;text-shadow:0 0 6px rgba(56,232,200,.5);`;
-        lbl.textContent='✦ best part';
-        vt.appendChild(lbl);
-      }
-      // Mirror on waveform row
-      const wf=document.createElement('div');
-      wf.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:${width}px;background:rgba(56,232,200,.1);border-top:1px solid rgba(56,232,200,.4);border-bottom:1px solid rgba(56,232,200,.4);pointer-events:none;z-index:3;`;
-      wr.appendChild(wf);
+      vt.appendChild(bar);
     });
 
-    // Selected cuts → red gap zones on video + waveform rows (only before snap)
+    // Selected cuts → one solid element per cut on the video track (only before snap)
     if(!S.snapped){
       S.cuts.filter(c=>c.selected && c.type!=='highlight').forEach(cut=>{
         const tlStart=sourceTimeToTimeline(cut.start);
@@ -124,71 +100,32 @@ function renderTimeline(){
         const safeEnd=tlEnd ?? sourceTimeToTimeline(cut.end-0.05) ?? safeStart+(cut.end-cut.start);
         const left=safeStart*zoom;
         const width=Math.max((safeEnd-safeStart)*zoom,6);
-        const c=_cutColors[cut.type]||_cutColors.dead;
+        const color=_cutTypeColor[cut.type]||_cutTypeColor.dead;
         const tooltip=`${cut.type||'cut'}: ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
 
-        const fill=document.createElement('div');
-        fill.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:${width}px;background:${c.bg};`;
-        fill.style.pointerEvents='all';
-        fill.style.cursor='pointer';
-        fill.style.zIndex='6';
-        fill.dataset.cutId=cut.id;
-        fill.classList.add('cut-fill');
-        fill.title=tooltip;
-        fill.addEventListener('click',e=>{
-          e.stopPropagation();
-          document.querySelectorAll('.cut-fill').forEach(el=>{el.style.outline='none';el.style.filter='none';});
-          document.querySelectorAll('.tl-clip').forEach(el=>el.classList.remove('selected'));
-          S.selectedCutId=cut.id;
-          S.selectedSegmentId=null;
-          fill.style.outline='2px solid #fff';
-          fill.style.filter='brightness(1.4)';
-          // Do NOT write to S.trimIn/S.trimOut — clip-level trim state
-          // updateTrimUI() reads cut.start/end via S.selectedCutId
-          updateTrimUI();
-          updateTrimContext();
-          if(video.src) video.currentTime=cut.start;
-          toast(`● Cut selected · ${cut.start.toFixed(2)}s → ${cut.end.toFixed(2)}s · ${(cut.end-cut.start).toFixed(2)}s`);
-        });
+        const el=document.createElement('div');
+        el.className='tl-cut'+(cut.id===S.selectedCutId?' cut-selected':'');
+        el.style.left=left+'px'; el.style.width=width+'px';
+        el.style.background=color;
+        el.dataset.cutId=cut.id;
+        el.title=tooltip;
         // script-part fillers render as dotted teal outline — no fill, no cut
-        if(cut.type==='filler' && cut.scriptPart){
-          fill.style.background='transparent';
-          fill.style.border='1px dotted rgba(56,232,200,.4)';
-          fill.style.opacity='0.5';
-        }
-        vt.appendChild(fill);
-
-        const lineL=document.createElement('div');
-        lineL.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:2px;background:${c.line};z-index:4;pointer-events:none;`;
-        vt.appendChild(lineL);
-        const lineR=document.createElement('div');
-        lineR.style.cssText=`position:absolute;top:0;bottom:0;left:${left+width-2}px;width:2px;background:${c.line};z-index:4;pointer-events:none;`;
-        vt.appendChild(lineR);
+        if(cut.type==='filler' && cut.scriptPart) el.classList.add('tl-cut-scriptpart');
+        el.addEventListener('click',e=>{
+          e.stopPropagation();
+          selectCut(cut.id);
+        });
         if(width>30){
-          const lbl=document.createElement('div');
-          lbl.style.cssText=`position:absolute;top:50%;left:${left+3}px;transform:translateY(-50%);font-size:8px;font-weight:700;color:${c.line};white-space:nowrap;z-index:7;pointer-events:all;cursor:pointer;text-shadow:0 0 4px rgba(0,0,0,.8);`;
-          lbl.textContent=(cut.type==='filler'&&cut.scriptPart)?'~ script':c.label;
-          lbl.style.color=(cut.type==='filler'&&cut.scriptPart)?'var(--teal)':c.line;
-          lbl.addEventListener('click',e=>{e.stopPropagation();fill.click();});
-          vt.appendChild(lbl);
+          const lbl=document.createElement('span');
+          lbl.className='tl-cut-label';
+          lbl.textContent=(cut.type==='filler'&&cut.scriptPart)?'~ script':(_cutTypeLabel[cut.type]||_cutTypeLabel.dead);
+          el.appendChild(lbl);
         }
-
-        // Mirror on waveform row
-        const wf=document.createElement('div');
-        wf.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:${width}px;background:${c.bg};pointer-events:none;z-index:3;`;
-        wr.appendChild(wf);
-        const wfL=document.createElement('div');
-        wfL.style.cssText=`position:absolute;top:0;bottom:0;left:${left}px;width:2px;background:${c.line};z-index:4;pointer-events:none;`;
-        wr.appendChild(wfL);
-        const wfR=document.createElement('div');
-        wfR.style.cssText=`position:absolute;top:0;bottom:0;left:${left+width-2}px;width:2px;background:${c.line};z-index:4;pointer-events:none;`;
-        wr.appendChild(wfR);
+        vt.appendChild(el);
       });
     }
 
-    // Unselected cuts → faint suggestion markers (only before snap — same as selected cuts;
-    // once gaps are snapped closed these source-time markers no longer correspond to
-    // anything on the compacted timeline)
+    // Unselected cuts → suggestion strip (own lane, solid mini-bars), only before snap
     if(!S.snapped) S.cuts.filter(c=>!c.selected && c.type!=='highlight').forEach(cut=>{
       const tlStart=sourceTimeToTimeline(cut.start);
       const tlEnd=sourceTimeToTimeline(cut.end);
@@ -196,45 +133,65 @@ function renderTimeline(){
       const safeStart=tlStart ?? sourceTimeToTimeline(cut.start+0.05) ?? 0;
       const safeEnd=tlEnd ?? sourceTimeToTimeline(cut.end-0.05) ?? safeStart+(cut.end-cut.start);
       const left=safeStart*zoom;
-      const width=Math.max((safeEnd-safeStart)*zoom,6);
-      const c=_pendColors[cut.type]||_pendColors.dead;
+      const width=Math.max((safeEnd-safeStart)*zoom,3);
+      const color=_cutTypeColor[cut.type]||_cutTypeColor.dead;
       const tooltip=`${cut.type||'cut'}: ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
       const el=document.createElement('div');
-      el.className='tl-clip silence';
-      el.style.left=left+'px'; el.style.width=Math.max(width,8)+'px';
-      el.style.top='0'; el.style.bottom='0';
-      el.style.background=c.bg; el.style.borderColor=c.border;
-      el.innerHTML=c.label; el.title=tooltip;
-      vt.appendChild(el);
+      el.className='tl-sugg';
+      el.style.left=left+'px'; el.style.width=width+'px';
+      el.style.background=color;
+      el.title=tooltip;
+      el.addEventListener('click',e=>{e.stopPropagation();selectCut(cut.id);});
+      ss.appendChild(el);
     });
   }
   updateCutBadge();
 
   // ── CAPTION TRACK ───────────────────────────────────────────
+  // Zoom-aware granularity (Part C4/C5): word-level chunks are unreadable at
+  // normal zoom (forced min-width made every chip overlap). Sentence-level is
+  // the default; word-level only above ~150px/s; a merged solid strip (no
+  // text) below ~30px/s.
   const ct=document.getElementById('captionTrack'); ct.innerHTML='';
-  S.captions.forEach(c=>{
+  let capItems;
+  if(zoom<30) capItems=_mergeCaptionsIntoStrip(S.captions);
+  else if(zoom>=150) capItems=S.captions.map(c=>({start:c.start,end:c.end,text:c.text}));
+  else capItems=_groupCaptionsIntoSentences(S.captions);
+
+  capItems.forEach((c,i)=>{
     const tlStart=sourceTimeToTimeline(c.start);
     const tlEnd=sourceTimeToTimeline(c.end);
     if(tlStart===null && tlEnd===null) return;
     const safeStart=tlStart ?? sourceTimeToTimeline(c.start+0.05) ?? 0;
     const safeEnd=tlEnd ?? sourceTimeToTimeline(c.end-0.05) ?? safeStart+(c.end-c.start);
+    // Clamp width to the next block's start so adjacent blocks physically cannot overlap
+    let nextTl=null;
+    if(i<capItems.length-1) nextTl=sourceTimeToTimeline(capItems[i+1].start) ?? capItems[i+1].start;
+    let width=(safeEnd-safeStart)*zoom;
+    if(nextTl!==null) width=Math.min(width,(nextTl-safeStart)*zoom-1);
+    width=Math.max(width,2);
     const el=document.createElement('div');
     el.className='tl-clip caption';
     el.style.left=(safeStart*zoom)+'px';
-    el.style.width=Math.max((safeEnd-safeStart)*zoom,30)+'px';
-    el.title=c.text;
-    el.innerHTML=`💬 ${c.text.slice(0,14)}${c.text.length>14?'…':''}`;
-    el.onclick=()=>seekTo(c.start);
+    el.style.width=width+'px';
+    if(c.text){
+      el.title=c.text;
+      el.innerHTML=`${c.text.slice(0,18)}${c.text.length>18?'…':''}`;
+      el.onclick=()=>seekTo(c.start);
+    } else {
+      el.title='Speech';
+    }
     ct.appendChild(el);
   });
 
   // Redraw waveform if data available
   if(S.waveformData) drawTimelineWaveform();
 
-  // Enforce strict DOM order: ruler → videoTrack → waveformRow → captionTrack → playhead
+  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → playhead
   const ti=document.getElementById('tracksInner');
   [
     document.getElementById('ruler'),
+    document.getElementById('suggestionStrip'),
     document.getElementById('videoTrack'),
     document.getElementById('waveformRow'),
     document.getElementById('captionTrack'),
@@ -321,12 +278,12 @@ tArea.addEventListener('click',e=>{
   // Scrub to clicked time
   handleTLClick(e);
   // Deselect if clicking empty track space (not a clip)
-  if(e.target===tArea||e.target.id==='tracksInner'||e.target.classList.contains('track-row')||e.target.classList.contains('ruler')){
+  if(e.target===tArea||e.target.id==='tracksInner'||e.target.classList.contains('track-row')||e.target.classList.contains('ruler')||e.target.classList.contains('suggestion-strip')){
     document.querySelectorAll('.tl-clip').forEach(c=>c.classList.remove('selected'));
     S.selectedClipId=null;
     S.selectedCutId=null;
     S.selectedSegmentId=null;
-    document.querySelectorAll('.cut-fill').forEach(el=>{el.style.outline='none';el.style.zIndex='3';});
+    document.querySelectorAll('.tl-cut').forEach(el=>el.classList.remove('cut-selected'));
     if(S.current){
       S.trimIn=S.current.trimIn||0;
       S.trimOut=S.current.trimOut||S.duration;
