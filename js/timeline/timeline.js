@@ -341,10 +341,11 @@ function renderClipList(){
 // ═══════════════════════════════════════
 // ZOOM TO FIT
 // ═══════════════════════════════════════
-tArea.addEventListener('dblclick',()=>{
+function zoomToFit(){
   if(!S.current) return;
   const dur=S.trimOut-S.trimIn;
   S.zoom=Math.max(1,Math.floor((tArea.clientWidth-20)/dur));
   renderTimeline();
   toast('↔ Zoom to fit');
-});
+}
+tArea.addEventListener('dblclick',zoomToFit);

@@ -106,14 +106,7 @@ document.addEventListener('keydown',e=>{
   if(e.code==='Delete'||e.code==='Backspace'){
     if(S.selectedCutId!==null){
       jlog('key',`${keyStr} → delete cut ${S.selectedCutId}`);
-      saveHistory();
-      S.cuts=S.cuts.filter(c=>c.id!==S.selectedCutId);
-      S.selectedCutId=null;
-      S.trimIn=S.current?.trimIn||0;
-      S.trimOut=S.current?.trimOut||S.duration;
-      updateTrimUI();
-      renderTimeline(); updateCutBadge();
-      toast('✕ Cut removed');
+      deleteSelectedCut();
       return;
     }
     if(S.selectedFindingId!==null){
@@ -167,6 +160,18 @@ function toggleSkipCuts(){
   document.getElementById('skipCutsBtn').classList.toggle('act',S.skipCuts);
   buildPlaySegments();
   toast(S.skipCuts?'⊘ Skip cuts ON':'⊘ Skip cuts OFF');
+}
+
+function deleteSelectedCut(){
+  if(S.selectedCutId===null) return;
+  saveHistory();
+  S.cuts=S.cuts.filter(c=>c.id!==S.selectedCutId);
+  S.selectedCutId=null;
+  S.trimIn=S.current?.trimIn||0;
+  S.trimOut=S.current?.trimOut||S.duration;
+  updateTrimUI();
+  renderTimeline(); updateCutBadge();
+  toast('✕ Cut removed');
 }
 
 function toggleScriptPart(cutId){
