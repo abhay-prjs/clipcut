@@ -132,29 +132,13 @@ document.addEventListener('mouseup',e=>{
   }
   if(_mqActive){
     _mqActive=false;
-    const mqLeft=parseFloat(_mqEl.style.left);
     const mqW=parseFloat(_mqEl.style.width);
     _mqEl.style.display='none';
-    if(mqW>5){
-      _mqFinished=true;
-      const tStart=mqLeft/S.zoom;
-      const tEnd=(mqLeft+mqW)/S.zoom;
-      document.querySelectorAll('.tl-clip').forEach(c=>c.classList.remove('selected'));
-      S.selectedClipId=null;
-      let hitCount=0, firstId=null, offset=0;
-      S.clips.forEach(clip=>{
-        const tIn=clip.trimIn||0, tOut=clip.trimOut||clip.duration;
-        const startPos=clip.timelineStart!=null?clip.timelineStart:offset;
-        offset=startPos+(tOut-tIn);
-        if(startPos<tEnd&&(startPos+(tOut-tIn))>tStart){
-          const el=document.querySelector(`[data-clip-id="${clip.id}"]`);
-          if(el){el.classList.add('selected');hitCount++;}
-          if(!firstId) firstId=clip.id;
-        }
-      });
-      if(firstId){S.selectedClipId=firstId;renderClipList();}
-      if(hitCount) toast(`▦ ${hitCount} clip${hitCount!==1?'s':''} selected`);
-    }
+    // Marquee-drag selection of timeline clips was dead code (S.clips isn't
+    // rendered per-clip on the timeline and clip.timelineStart is never set —
+    // only S.segments have real timeline positions). Suppress the click-to-seek
+    // that would otherwise fire on drag-release; no selection behavior (yet).
+    if(mqW>5) _mqFinished=true;
   }
   if(dragTrimMode){
     if(S.selectedCutId!==null){
