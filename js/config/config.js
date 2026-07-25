@@ -25,10 +25,10 @@ function updateConfigStatus(){
   if(!el) return;
   const orOk=!!S.orKey;
   el.innerHTML=
-    `<span class="cs-pill ok">✓ Whisper</span>`+
+    `<span class="cs-pill ok" title="Whisper ready">✓</span>`+
     (orOk
-      ? `<span class="cs-pill ok">✓ OpenRouter</span>`
-      : `<span class="cs-pill err">✗ OpenRouter</span>`);
+      ? `<span class="cs-pill ok" title="OpenRouter connected">✓</span>`
+      : `<span class="cs-pill err" title="OpenRouter not configured">✗</span>`);
 }
 
 function setAiSource(src){
