@@ -280,14 +280,35 @@ function handleTLClick(e){
   // playhead to appear frozen because click→src and src→pixel are inconsistent.
   let srcTime = tlPos;
   if(S.segments.length){
+    let matched = false;
     for(const seg of S.segments){
       const segEndTl = seg.timelineStart + seg.duration;
       if(tlPos >= seg.timelineStart && tlPos <= segEndTl){
         srcTime = seg.sourceStart + (tlPos - seg.timelineStart);
+        matched = true;
         break;
       }
-      // Past last segment — clamp to end of last segment's source range
-      srcTime = S.segments[S.segments.length-1].sourceEnd;
+    }
+    if(!matched){
+      // Click landed in a gap (pre-snap) or outside all segments — snap to the
+      // nearer boundary: the end of the segment before the click, or the start
+      // of the segment after it.
+      const first = S.segments[0], last = S.segments[S.segments.length-1];
+      if(tlPos <= first.timelineStart){
+        srcTime = first.sourceStart;
+      } else if(tlPos >= last.timelineStart+last.duration){
+        srcTime = last.sourceEnd;
+      } else {
+        let prevSeg=null, nextSeg=null;
+        for(const seg of S.segments){
+          const segEndTl = seg.timelineStart + seg.duration;
+          if(segEndTl <= tlPos) prevSeg = seg;
+          if(!nextSeg && seg.timelineStart >= tlPos) nextSeg = seg;
+        }
+        const distToPrev = prevSeg ? tlPos-(prevSeg.timelineStart+prevSeg.duration) : Infinity;
+        const distToNext = nextSeg ? nextSeg.timelineStart-tlPos : Infinity;
+        srcTime = (distToNext <= distToPrev) ? nextSeg.sourceStart : prevSeg.sourceEnd;
+      }
     }
   }
 
