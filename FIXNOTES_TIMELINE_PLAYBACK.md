@@ -381,6 +381,8 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 | 18 | ○ | `js/ui/ui.js:196–197` | `toggleCutSkip` calls `renderAllFindings()` twice | Remove dup |
 | 19 | ○ | `CLAUDE.md` | File-structure section says `home_editor/`; files live at repo root — misleads future sessions | Update doc |
 | 20 | ● | `js/timeline/trim.js:159` | Cut-edge drag (trim bar) commits without `saveHistory()` — resizing a cut is not undoable | Snapshot once at drag *start* (mousedown) or on pointerup before commit; also applies to the new on-timeline drag (§C6) |
+| 21 | ● | `js/ui/ui.js:39` (`setAspect`) + `serve.py` export | **Aspect ratio is preview-only** — `setAspect()` just sets CSS `aspect-ratio` on `#videoContainer`; `export_video()` never receives it, so a "9:16" edit exports at the source aspect. WYSIWYG lie #2 (after caption styles) | Store choice in `S.aspect` (state, history, project file). Pass to `export_video()`; in ffmpeg insert one stage before encode: crop-to-fill `crop=ih*9/16:ih` (default, what CapCut does) or pad-to-fit `scale=...:force_original_aspect_ratio=decrease,pad=...` — user picks crop/pad in export modal. Preview box already matches, so no UI change beyond the toggle |
+| 22 | ● | `js/core/state.js` + `js/media/import.js:122` (`selectClip`) | **Edit state is global, not per-clip** — `S.cuts`, `S.captions`, `S.waveformData`, markers all live on `S` only; `selectClip()` swaps segments but wipes/keeps the rest, so switching clips loses or cross-contaminates detections and transcripts. Hard blocker for batch export (F3) and even basic multi-clip use | Mirror the `clip.segments` pattern: on `selectClip`, persist `S.cuts/captions/markers/waveformData/trimIn/trimOut` back onto the *outgoing* clip object, then load the incoming clip's copies (defaulting empty). `_makeSnapshot()` already snapshots clips — per-clip fields ride along in undo and the future project file for free |
 
 ---
 
@@ -547,10 +549,11 @@ Upgrade the audit-v1 template (caption style JSON) into a **UGC preset**:
 | Background removal, effects, stickers | ✕ | **out of scope — don't chase** |
 | Multi-track compositing | ✕ | out of scope; text layers cover UGC needs |
 
-Two genuine gaps surfaced by this comparison, now on the list: **export ignores
-the chosen aspect ratio** (preview-only `aspect-ratio` CSS — exported file keeps
-source aspect; needs ffmpeg crop/pad stage), and **per-clip edit state**
-(cuts/captions are global, breaking multi-clip batch — prerequisite for F3).
+Two genuine gaps surfaced by this comparison, now filed with targeted fixes in
+the Part D table: **export ignores the chosen aspect ratio** (bug **#21** —
+ffmpeg crop/pad stage) and **per-clip edit state** (bug **#22** — persist
+cuts/captions/waveform onto the clip object on `selectClip` swap; prerequisite
+for F3 batch).
 
 ### F6. Revised phase plan (supersedes Part E ordering from Phase 5 on)
 
