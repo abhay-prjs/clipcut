@@ -414,6 +414,158 @@ edge-drag trimming, snap-to-word-boundary while dragging cuts.
 
 ---
 
+## PART F — PRODUCT ROADMAP: "CapCut for UGC, automated"
+
+Direction: not a general editor — a **UGC factory**. Import raw talking-head
+footage → auto-cut → captions → template → (batch) export, with manual editing
+that feels as direct as CapCut when you need to intervene. Everything below is
+spec'd against what CapCut actually does, adapted to ClipCut's no-build stack.
+
+### F1. Universal trim grammar (one interaction, every object)
+
+§C6's drag mechanics must not be a cut-only feature. Define **one** drag helper
+and register every timeline object through it:
+
+```
+makeTrimmable(el, {
+  getRange(),            // current {start, end} in timeline seconds
+  bounds(),              // clamp range {min, max} + neighbour edges
+  snapTargets(),         // word edges, cut edges, segment edges, playhead, whole seconds
+  onPreview(start,end),  // live style nudge only — no renderTimeline
+  onCommit(start,end),   // saveHistory → mutate state → buildPlaySegments → render
+})
+```
+
+| Object | Edge drag | Center drag | Extras |
+|---|---|---|---|
+| Cut block | resize cut | move cut (keep duration) | seek-on-release audition |
+| Segment | slip trim (`sourceStart/End`) | — (v1) | optional **ripple mode** toggle: downstream segments shift live to close the gap (CapCut's default feel) |
+| Caption block | retime caption | move caption | double-click = edit text (exists) |
+| Text layer (future) | retime | move in time | drag in *preview box* moves in space (§audit v1) |
+| Music/B-roll (future) | trim | move | same grammar, zero new learning |
+
+Shared modifiers everywhere: **snap ±6px with guide line · Alt = no snap ·
+Shift = 0.25× fine · always one `saveHistory()` per gesture** (fixes #20 by
+construction). The precision trim bar stays as an inspector, no longer the
+primary tool.
+
+### F2. Edit verification — local lint + AI cross-check ("feels off" detector)
+
+Research note: most "something feels off" moments after auto-cutting are
+**mechanically detectable** — you don't need an LLM for the first tier, and the
+data (word timestamps, RMS frames) is already in memory.
+
+**Tier 1 — deterministic edit linter (free, instant, runs after every apply):**
+
+| Check | Signal | Auto-fix offer |
+|---|---|---|
+| Mid-word cut | cut edge falls inside `[word.start, word.end]` of any caption | snap edge to nearest word boundary |
+| Audio-pop risk | cut edge lands on RMS frame above threshold (waveform frames exist at 0.05s resolution) | snap edge to nearest RMS valley within ±0.15s — this is what pro auto-editors do to avoid clicks |
+| Orphan sliver | kept segment < 0.5s between two cuts | merge into neighbouring cut |
+| Machine-gun pacing | > N boundaries per 10s window | suggest merging nearby cuts (mergeCuts exists) |
+| Sentence amputation | cut removes > 60% of a sentence (punct-grouping helper exists) | flag for review |
+| Dead start/end | first/last kept segment begins/ends in silence | trim suggestion |
+
+Render results as a review list (reuse the findings-card UI); each row = jump +
+one-click fix. This alone will catch most of what CapCut's "smart edit" quietly
+does for you.
+
+**Tier 2 — LLM cross-verification (uses existing OpenRouter/Ollama + ACTION
+plumbing):** send the *planned edit* — segment durations, cut list with
+types/reasons, transcript with on-script/ad-lib marks (LCS diff already
+implemented) — and ask for review only: pacing verdict, hook check (is the first
+3s strong?), cuts that change meaning, retakes where the *wrong* take was kept.
+Responses come back as the existing ACTION blocks in **review mode** (approve/
+reject per suggestion — this is literally the pending "cut review mode" feature;
+wire it here). Gate behind Deep mode; Tier 1 always runs.
+
+### F3. Batch export + template selection
+
+The automated-factory core. CapCut has batch only in its commercial tooling —
+this is where ClipCut can be *better* for UGC.
+
+- **Job model**: each imported clip already owns `clip.segments`; add
+  `clip.cuts`, `clip.captions`, `clip.templateId` so per-clip edit state fully
+  swaps on `selectClip` (today captions/cuts are global-only — prerequisite,
+  note it). An export job = `{sourcePath, segments, captions, template,
+  preset, outName}`.
+- **Queue UI**: export modal gains a "Batch" tab — list of clips with
+  checkbox · template dropdown · status column (queued/encoding %/done/failed).
+  Naming pattern with tokens: `{name}_{template}_{date}`. Continue-on-failure,
+  per-job cancel.
+- **Backend**: `export_batch(jobs_json)` in serve.py — sequential loop over the
+  existing `_export_video` internals (nvenc serializes anyway), one native SAVE
+  → *folder* picker for the batch, progress via the existing `evaluate_js`
+  channel with a job index. Mostly plumbing, no new encode logic.
+- **Factory pipeline** (the headline): "Process All" button = for each clip:
+  Auto Mode (exists, per-clip) → Tier-1 lint auto-fixes → apply template →
+  enqueue export. Drop 10 raws, return to 10 finished verticals.
+
+### F4. Templates — expanded to full UGC presets
+
+Upgrade the audit-v1 template (caption style JSON) into a **UGC preset**:
+
+```json
+{ "name": "TikTok Hook v2",
+  "aspect": "9:16",
+  "textLayers": [ {"slot":"hook","anchor":"top-safe","style":{...}},
+                  {"slot":"captions","anchor":"lower-third","style":{...}} ],
+  "captionMode": "word-highlight",
+  "exportPreset": "balanced",
+  "autoSettings": { "useVAD": true, "autoFillers": true }
+}
+```
+
+- **Platform safe zones** (research: fixed rects where TikTok/Reels/Shorts UI
+  covers video — roughly top 10%, bottom 18–20%, right 12% on 9:16): anchors
+  place text *inside* safe area automatically; show safe-zone guides as an
+  overlay toggle in the preview box.
+- **Word-highlight captions (the CapCut signature look)**: achievable free via
+  **ASS karaoke timing** — Whisper word timestamps → `\k` tags per word →
+  libass renders the bouncing per-word highlight in the existing
+  `subtitles=` burn-in path, GPU pipeline unchanged. This single feature closes
+  most of the visual gap to CapCut's caption templates. Preview side: the
+  existing overlay div highlights the active word (transcript highlighter logic
+  already tracks it).
+- Templates stored in `templates.json` next to config; "Save current as
+  template" from the inspector; template picker in Apply-stage and Batch tab.
+
+### F5. CapCut-parity checklist (UGC-relevant only)
+
+| CapCut feature | ClipCut status | Verdict |
+|---|---|---|
+| Auto captions, word-level | ✅ have (Whisper/WhisperX, better accuracy) | keep |
+| Animated caption styles / word highlight | ⚠ static only | **F4 ASS karaoke — do** |
+| Silence / filler auto-cut | ✅ have (VAD + ffmpeg + fillers, arguably better) | keep |
+| Direct block trimming on timeline | ✕ | **F1 — do** |
+| Ripple editing | ✕ (snapGaps is manual) | F1 ripple toggle |
+| Templates | ✕ | **F4 — do** |
+| Batch/auto pipeline | ⚠ single-clip Auto Mode | **F3 — do** |
+| Aspect presets + safe zones | ⚠ aspect only, preview-only | F4 safe zones + export-side crop/pad (ffmpeg scale/pad per aspect — export currently ignores aspect entirely; flag as gap) |
+| Music + auto-ducking | ✕ | later (P3) — sidechaincompress filter, one track |
+| Speed ramp / curves | ✕ | later (P3), UGC value is modest |
+| Background removal, effects, stickers | ✕ | **out of scope — don't chase** |
+| Multi-track compositing | ✕ | out of scope; text layers cover UGC needs |
+
+Two genuine gaps surfaced by this comparison, now on the list: **export ignores
+the chosen aspect ratio** (preview-only `aspect-ratio` CSS — exported file keeps
+source aspect; needs ffmpeg crop/pad stage), and **per-clip edit state**
+(cuts/captions are global, breaking multi-clip batch — prerequisite for F3).
+
+### F6. Revised phase plan (supersedes Part E ordering from Phase 5 on)
+
+1. Phase 1–4 unchanged (bug fixes → timeline redesign+C6 → perf → playback proxy).
+2. **Phase 5 — Universal trim (F1)** + Tier-1 edit linter (F2) — makes manual
+   correction fast and auto output trustworthy.
+3. **Phase 6 — State groundwork**: per-clip edit state, text-layer state,
+   project save/autosave (#8, #10).
+4. **Phase 7 — Templates (F4)**: presets, safe zones, ASS karaoke burn-in,
+   export-side aspect handling.
+5. **Phase 8 — Batch (F3)**: queue backend + Batch tab + factory "Process All".
+6. **Phase 9 — Tier-2 AI review (F2)** wiring through ACTION review mode.
+
+---
+
 *Everything above was verified against the working tree at commit `0fef7d5`
 (files at repo root). Line numbers drift as edits land — search the quoted
 identifiers if a number is stale.*
