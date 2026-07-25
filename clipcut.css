@@ -124,15 +124,28 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',-apple-system,B
 /* playback bar */
 .playback-bar{height:56px;background:var(--s1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:center;gap:6px;padding:0 14px;flex-shrink:0;}
 .pb-pill{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--b1);flex-wrap:wrap;justify-content:center;}
-.pb-btn{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.75);font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;}
+.pb-btn{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.75);font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0;}
 .pb-btn:hover{background:var(--s3);color:#fff;}
 .pb-btn.play-main{width:38px;height:38px;background:var(--blue);color:#fff;font-size:15px;box-shadow:0 2px 8px rgba(10,132,255,.4);}
 .pb-btn.play-main:hover{transform:scale(1.06);background:var(--blue);}
-.speed-sel{background:var(--s2);border:1px solid var(--b1);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:5px 8px;border-radius:7px;cursor:pointer;height:28px;}
+.pb-btn.loop-ab{font-size:10px;font-weight:700;letter-spacing:-.02em;}
+.speed-sel{background:var(--s2);border:1px solid var(--b1);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:5px 8px;border-radius:7px;cursor:pointer;height:32px;box-sizing:border-box;}
 .vol-row{display:flex;align-items:center;gap:6px;}
 .vol-icon{font-size:11px;color:var(--text2);}
-input[type=range]{-webkit-appearance:none;height:4px;background:rgba(255,255,255,.12);border-radius:2px;outline:none;cursor:pointer;}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.4);margin-top:-5.5px;}
+
+/* Range inputs — the outer <input> box is sized to the THUMB (not the
+   thin track) so flexbox centers it correctly against sibling buttons.
+   Chromium (incl. Edge WebView2, used by pywebview) otherwise aligns
+   the thumb's border-box to the *track's* content-box rather than the
+   input's own box when appearance:none is set on both, which is what
+   was throwing the volume thumb out of vertical alignment with the
+   rest of the playback row. See:
+   https://css-tricks.com/sliding-nightmare-understanding-range-input/ */
+input[type=range]{-webkit-appearance:none;appearance:none;height:15px;background:transparent;outline:none;cursor:pointer;margin:0;box-sizing:border-box;}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:rgba(255,255,255,.12);}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.4);margin-top:-5.5px;box-sizing:border-box;}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.12);}
+input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;border:none;box-shadow:0 1px 3px rgba(0,0,0,.4);box-sizing:border-box;}
 #volSlider{width:60px;}
 
 /* ── RIGHT PANEL ── */
