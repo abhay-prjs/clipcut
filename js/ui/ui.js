@@ -24,8 +24,13 @@ function deleteClip(){
     video.src=''; video.style.display='none';
     document.getElementById('noVideoMsg').style.display='flex';
   }
-  renderClipList(); renderTimeline(); renderAllFindings(); updateCaptionList();
+  renderClipList(); renderTimeline(); renderAllFindings(); updateCaptionList(); syncTopbarClipName();
   toast('Clip deleted');
+}
+
+function deleteClipById(id){
+  S.selectedClipId=id;
+  deleteClip();
 }
 
 // ═══════════════════════════════════════
@@ -48,11 +53,21 @@ document.querySelectorAll('.modal-backdrop').forEach(m=>m.addEventListener('clic
 // ═══════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════
+function syncTopbarClipName(){
+  const el=document.getElementById('topbarClipName');
+  if(!el) return;
+  el.textContent = S.current ? S.current.name : 'No clip loaded';
+}
+
 function switchTab(name){
-  const names=['media','captions','silence','ai','settings'];
-  document.querySelectorAll('.panel-tab').forEach((t,i)=>t.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.panel-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id===`tab-${name}`));
   if(name==='settings') _loadWhisperConfigFromServer();
+}
+
+function switchInspTab(name){
+  document.querySelectorAll('.insp-tab').forEach(t=>t.classList.toggle('active',t.dataset.insp===name));
+  document.querySelectorAll('.insp-panel').forEach(p=>p.classList.toggle('active',p.dataset.insp===name));
 }
 
 // ═══════════════════════════════════════

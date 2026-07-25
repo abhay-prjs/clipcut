@@ -59,6 +59,7 @@ function _applySnapshot(snap){
     video.style.display='block';
     document.getElementById('propName').textContent = S.current.name.slice(0,16);
     document.getElementById('propDur').textContent  = fmt(S.current.duration);
+    syncTopbarClipName();
     video.onloadedmetadata = () => {
       document.getElementById('propRes').textContent = `${video.videoWidth}×${video.videoHeight}`;
       updateTrimUI();

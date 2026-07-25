@@ -138,6 +138,7 @@ function selectClip(id) {
   video.style.display='block';
   document.getElementById('propName').textContent = c.name.slice(0,16);
   document.getElementById('propDur').textContent  = fmt(c.duration);
+  syncTopbarClipName();
 
   document.getElementById('propRes').textContent = c.file ? (c.file.size/1e6).toFixed(1)+'MB' : '…';
   video.onerror = null;

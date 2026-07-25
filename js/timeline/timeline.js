@@ -332,8 +332,9 @@ function renderClipList(){
   if(!S.clips.length){el.innerHTML='<div class="empty-state">No clips yet</div>';return;}
   el.innerHTML=S.clips.map(c=>`
     <div class="clip-item ${S.current&&S.current.id===c.id?'active':''}" onclick="selectClip('${c.id}')">
-      <div class="clip-thumb">🎬</div>
-      <div class="clip-info"><div class="clip-name">${c.name}</div><div class="clip-dur">${fmt(c.duration)}</div></div>
+      <div class="clip-thumb">🎬<span class="clip-dur">${fmt(c.duration)}</span></div>
+      <button class="clip-del" onclick="event.stopPropagation();deleteClipById('${c.id}')" title="Delete clip">✕</button>
+      <div class="clip-info"><div class="clip-name">${c.name}</div></div>
     </div>`).join('');
 }
 

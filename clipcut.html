@@ -15,22 +15,20 @@
   <div class="dv"></div>
 
   <div class="action-cluster">
-    <button class="icon-btn ai-btn" onclick="openSilenceModal()" title="AI Silence">✂</button>
-    <button class="icon-btn ai-btn" onclick="openCaptionAI()" title="AI Captions">💬</button>
-    <div class="dv"></div>
-    <button id="autoModeBtn" onclick="runAutoMode(false)" class="icon-btn" title="Auto Mode">⚡</button>
-    <button id="autoModeDeepBtn" onclick="runAutoMode(true)" class="icon-btn ai-btn" title="Deep Mode">✦</button>
-    <div id="cutBadge" style="font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:4px 8px;border-radius:6px;background:rgba(255,69,58,.15);border:none;color:var(--red);display:none">0 cuts</div>
+    <button class="icon-btn" onclick="onUploadZoneClick()" title="Import Media">⬆</button>
     <div class="dv"></div>
     <button class="icon-btn" onclick="undo()" title="Undo">↺</button>
     <button class="icon-btn" onclick="redo()" title="Redo">↻</button>
     <div class="dv"></div>
     <button class="icon-btn" onclick="addMarker()" title="Add Marker">♦</button>
-    <div class="dv"></div>
     <button class="icon-btn danger" onclick="deleteClip()" title="Delete Clip">✕</button>
+    <div id="cutBadge" style="font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:4px 8px;border-radius:6px;background:rgba(255,69,58,.15);border:none;color:var(--red);display:none">0 cuts</div>
   </div>
 
   <div class="spacer"></div>
+  <div class="topbar-clip-name" id="topbarClipName">No clip loaded</div>
+  <div class="spacer"></div>
+
   <div class="config-status" id="configStatus"></div>
   <div class="dv"></div>
   <div class="timecode" id="timecodeDisplay">00:00:00</div>
@@ -44,27 +42,32 @@
 
   <!-- LEFT PANEL -->
   <div class="left-panel">
-    <div class="panel-tabs">
-      <div class="panel-tab active" onclick="switchTab('media')">Media</div>
-      <div class="panel-tab" onclick="switchTab('captions')">Captions</div>
-      <div class="panel-tab" onclick="switchTab('silence')">Silence</div>
-      <div class="panel-tab" onclick="switchTab('ai')">AI</div>
+    <div class="icon-rail">
+      <div class="rail-item panel-tab active" data-tab="media" onclick="switchTab('media')"><span class="rail-icon">🎬</span><span class="rail-label">Media</span></div>
+      <div class="rail-item panel-tab" data-tab="captions" onclick="switchTab('captions')"><span class="rail-icon">💬</span><span class="rail-label">Captions</span></div>
+      <div class="rail-item panel-tab" data-tab="silence" onclick="switchTab('silence')"><span class="rail-icon">🔇</span><span class="rail-label">Silence</span></div>
+      <div class="rail-item panel-tab" data-tab="ai" onclick="switchTab('ai')"><span class="rail-icon">✦</span><span class="rail-label">AI Tools</span></div>
     </div>
-    <!-- tabs above kept for JS switchTab() hooks; layout matches new underline style via CSS -->
 
+    <div class="left-panel-body">
     <!-- Media -->
     <div class="panel-content tab-content active" id="tab-media">
       <div class="panel-section">
-        <div class="upload-zone" onclick="onUploadZoneClick()">
-          <div class="ui">📁</div>
-          <p>Drop video or <span>browse</span></p>
-          <p style="font-size:9px;margin-top:3px;">MP4 · MOV · WEBM · MKV</p>
+        <div class="upload-zone slim" onclick="onUploadZoneClick()">
+          <span>+ Import Media</span>
         </div>
+        <div style="font-size:8.5px;color:var(--text3);text-align:center;margin-top:5px">MP4 · MOV · WEBM · MKV — or drop anywhere</div>
         <input type="file" id="fileInput" accept="video/*" multiple>
       </div>
       <div class="panel-section">
+        <div style="display:flex;gap:6px">
+          <button class="act-btn" style="margin:0;flex:1;font-size:10px" onclick="runAutoMode(false)">⚡ Auto</button>
+          <button class="act-btn ai" style="margin:0;flex:1;font-size:10px" onclick="runAutoMode(true)">✦ Deep</button>
+        </div>
+      </div>
+      <div class="panel-section">
         <div class="panel-label">Library</div>
-        <div id="clipList"><div class="empty-state">No clips yet</div></div>
+        <div id="clipList" class="clip-grid"><div class="empty-state">No clips yet</div></div>
       </div>
     </div>
 
@@ -114,6 +117,9 @@
 
     <!-- Silence -->
     <div class="panel-content tab-content" id="tab-silence">
+      <div class="panel-section">
+        <button class="act-btn ai" onclick="openSilenceModal()">✦ Open AI Silence Studio</button>
+      </div>
       <div class="panel-section">
         <p style="font-size:10.5px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
           Audio-based silence and dead-air detection.
@@ -217,6 +223,7 @@
         <button class="act-btn primary" onclick="applyCuts()">✓ Apply Selected Cuts</button>
       </div>
     </div>
+    </div>
   </div>
 
   <!-- CENTER -->
@@ -269,6 +276,13 @@
 
   <!-- RIGHT PANEL -->
   <div class="right-panel">
+    <div class="insp-tabs">
+      <div class="insp-tab active" data-insp="video" onclick="switchInspTab('video')">Video</div>
+      <div class="insp-tab" data-insp="speed" onclick="switchInspTab('speed')">Speed</div>
+      <div class="insp-tab" data-insp="captions" onclick="switchInspTab('captions')">Captions</div>
+    </div>
+
+    <div class="insp-panel active" data-insp="video">
     <div class="prop-group">
       <div class="prop-title">Clip Info</div>
       <div class="info-card">
@@ -285,8 +299,9 @@
         <div class="flip-btn" id="flipV" onclick="toggleFlip('v')"><span class="icon">↕</span><span>Vertical</span></div>
       </div>
     </div>
+    </div>
 
-
+    <div class="insp-panel" data-insp="speed">
     <div class="prop-group">
       <div class="prop-title">Speed</div>
       <div class="prop-row">
@@ -300,7 +315,9 @@
         </select>
       </div>
     </div>
+    </div>
 
+    <div class="insp-panel" data-insp="captions">
     <div class="prop-group">
       <div class="prop-title">Caption Style</div>
 
@@ -387,6 +404,7 @@
         <input type="number" id="captionPosZInput" min="0.1" max="10" value="1" step="0.05" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncCaptionPos('z',this.value)">
         <span style="font-size:9px;color:var(--text2)">×</span>
       </div>
+    </div>
     </div>
 
     <div class="prop-group">
@@ -618,15 +636,14 @@
     <div class="zoom-btn" onclick="zoomTL(-1)">−</div>
     <div class="zoom-btn" onclick="zoomTL(1)">+</div>
     <div class="dv"></div>
-    <div class="tool-tray">
-      <button class="tool-btn active" id="selectTool" style="height:24px;font-size:10px">Select</button>
-      <button class="tool-btn" id="trimTool" style="height:24px;font-size:10px">Trim</button>
-      <button class="tool-btn" style="height:24px;font-size:10px" onclick="splitAtPlayhead()" title="Ctrl+B">Split</button>
-      <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimBefore()" title="Q">Trim Before</button>
-      <button class="tool-btn" style="height:24px;font-size:10px" onclick="mergeCuts()" title="Merge overlapping/adjacent cuts of the same type">Merge Cuts</button>
-      <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimAfter()" title="W">Trim After</button>
-      <button class="tool-btn" style="height:24px;font-size:10px" id="silVisBtn" onclick="toggleSilenceVis()">Silence</button>
-    </div>
+    <button class="tool-btn active" id="selectTool" style="height:24px;font-size:10px">Select</button>
+    <button class="tool-btn" id="trimTool" style="height:24px;font-size:10px">Trim</button>
+    <button class="tool-btn" style="height:24px;font-size:10px" onclick="splitAtPlayhead()" title="Ctrl+B">Split</button>
+    <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimBefore()" title="Q">Trim Before</button>
+    <button class="tool-btn" style="height:24px;font-size:10px" onclick="mergeCuts()" title="Merge overlapping/adjacent cuts of the same type">Merge Cuts</button>
+    <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimAfter()" title="W">Trim After</button>
+    <button class="tool-btn" style="height:24px;font-size:10px" id="silVisBtn" onclick="toggleSilenceVis()">Silence</button>
+    <div class="dv"></div>
     <button class="toggle-chip" style="height:24px" onclick="snapPlayhead()">Snap</button>
     <button class="toggle-chip" style="height:24px" onclick="snapGaps()">Snap Gaps</button>
   </div>
