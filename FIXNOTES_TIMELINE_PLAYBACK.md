@@ -313,6 +313,46 @@ The video track and waveform lanes look fine in the screenshot — the redesign
 effort should be weighted: caption lane first, cut rendering second, segment
 styling last.
 
+### C6. Direct on-timeline cut dragging (CapCut-style) — spec
+
+Requested from live use: when a filler/dead-air block sits on the timeline, you
+should grab its edge and drag it right there — the precision trim bar stays for
+fine work, but the timeline is where trimming should feel native.
+
+**Interaction spec (per cut block, and later per segment):**
+
+- **Grab zones**: left/right 8px of every selected-cut block, `cursor: ew-resize`;
+  center of the block = `cursor: grab` and drags the whole cut (move, preserving
+  duration). Use Pointer Events with `setPointerCapture` so the drag survives
+  leaving the block.
+- **Mapping**: px→seconds via `S.zoom`, then through the timeline→source inverse
+  mapper (`timelineToSourceTime()` — same function Part A's proxy work needs; a
+  cut edge dragged across a removed gap clamps at the gap boundary).
+- **Clamping**: edge cannot cross the cut's other edge (min 0.05s), the containing
+  segment's bounds, or a neighbouring cut of the same lane.
+- **Live preview without re-render**: during the drag, update only the block's
+  `left/width` style and the trim-context readout — the exact live-nudge pattern
+  that already exists in `trim.js:87–92` (`[data-cut-id]` lookup). No
+  `renderTimeline()` until pointerup.
+- **On pointerup**: `saveHistory()` → commit `cut.start/end` →
+  `buildPlaySegments()` → `renderTimeline()`. Optionally seek the video to the
+  dragged edge (CapCut does this — instant audition of the new boundary).
+- **Snapping** (the thing that makes it feel professional): while dragging, snap
+  within ±6px to — word boundaries from `S.captions` (you already have word-level
+  timestamps — snapping cut edges to word edges is a headline feature for
+  talking-head editing), other cut edges, segment edges, the playhead, and whole
+  seconds. Show a 1px white snap-guide line. **Alt = disable snapping** for free
+  drag; Shift = 0.25× fine drag (replaces the current always-on 0.5× factor,
+  bug #9).
+- **Same mechanics for segments** (Phase 5 "edge-drag trimming"): dragging a
+  segment's edge adjusts its `sourceStart/sourceEnd` — i.e. slip-trimming a kept
+  region directly, which quietly replaces most uses of Trim Before/After buttons.
+
+**Related bug found while speccing (added as #20):** the existing trim-bar cut
+drag never calls `saveHistory()` — releasing a cut-edge drag is **not undoable**
+(`trim.js:159` mouseup path). The new drag flow must snapshot on pointerup; fix
+the trim-bar path the same way.
+
 ---
 
 ## PART D — FULL TARGETED BUG LIST
@@ -340,6 +380,7 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 | 17 | ○ | `js/media/export.js:171–301` + `whisper.js:7` | Entire Flask export path (`_doFlaskExport`, SSE, `getWhisperBase`) is dead per your own architecture (Flask removed) — ~200 lines of confusion | Delete; `startExport` routes pywebview-only, error toast otherwise |
 | 18 | ○ | `js/ui/ui.js:196–197` | `toggleCutSkip` calls `renderAllFindings()` twice | Remove dup |
 | 19 | ○ | `CLAUDE.md` | File-structure section says `home_editor/`; files live at repo root — misleads future sessions | Update doc |
+| 20 | ● | `js/timeline/trim.js:159` | Cut-edge drag (trim bar) commits without `saveHistory()` — resizing a cut is not undoable | Snapshot once at drag *start* (mousedown) or on pointerup before commit; also applies to the new on-timeline drag (§C6) |
 
 ---
 
@@ -352,6 +393,8 @@ Bugs #1, #3, #18 (one-liners) · #2 (delete one line) · #9 (delete a factor) ·
 #4, #5, #13 (mapping) → then the Part C redesign: lane stack, solid color tokens,
 1-element cuts, suggestion strip, gap hatching, caption-track clamping (C4).
 Do the redesign *after* the mapping fixes so blocks land where they should.
+Then §C6 on-timeline cut dragging (edges + move + snapping) — it depends on the
+mapping fixes and the 1-element cut blocks, and includes bug #20.
 
 **Phase 3 — timeline performance (1 day)**
 F-B1 virtualization → F-B2 layer split → F-B3/B4 batching + delegation → F-B5/B6 CSS/waveform.
