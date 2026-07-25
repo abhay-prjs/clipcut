@@ -455,9 +455,6 @@ function applyCuts(){
   S.snapped=false;
   // remove applied cuts from S.cuts
   S.cuts=S.cuts.filter(c=>!c.selected);
-  // captions and chat history are stale after cuts — clear both
-  S.captions=[];
-  S.chatHistory=[];
   updateCaptionList();
   // ensure Skip Cuts is ON so playback jumps applied segments immediately
   S.skipCuts=true;
@@ -468,7 +465,7 @@ function applyCuts(){
   renderTimeline();
   // Sync to pywebview shared state so Python can read segments without bridge call
   if(window.pywebview?.state) window.pywebview.state.segments = S.segments;
-  toast(`✓ ${selectedCuts.length} cuts applied — ${newSegments.length} segments · re-transcribe to sync captions`);
+  toast(`✓ ${selectedCuts.length} cuts applied — ${newSegments.length} segments`);
 }
 
 async function runAutoMode(deep=false){
