@@ -59,7 +59,23 @@ function togglePlay() {
   }
 }
 
-function skipTime(d){if(!video.src)return;video.currentTime=clamp(video.currentTime+d,S.trimIn,S.trimOut||S.duration);}
+function skipTime(d){
+  if(!video.src)return;
+  let target=clamp(video.currentTime+d,S.trimIn,S.trimOut||S.duration);
+  if(S.playSegments && S.playSegments.length){
+    const inSeg=S.playSegments.some(s=>target>=s.start&&target<=s.end);
+    if(!inSeg){
+      if(d>=0){
+        const next=S.playSegments.find(s=>s.start>target);
+        target=next?next.start:S.playSegments[S.playSegments.length-1].end;
+      } else {
+        const prevSegs=S.playSegments.filter(s=>s.end<target);
+        target=prevSegs.length?prevSegs[prevSegs.length-1].end:S.playSegments[0].start;
+      }
+    }
+  }
+  video.currentTime=target;
+}
 function setSpeed(v){video.playbackRate=parseFloat(v);document.getElementById('speedSelect').value=v;}
 const _ICON_VOL_MUTE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6" stroke-linecap="round"/></svg>';
 const _ICON_VOL_LOW  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 10a3 3 0 0 1 0 4" stroke-linecap="round"/></svg>';
