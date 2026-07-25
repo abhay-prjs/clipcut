@@ -344,12 +344,8 @@ function updateCaptionOverlay(){
     el.innerHTML=formatCaptionText(c.text);
     el.style.lineHeight=S.captionLayout==='grid'?'1.2':'';
     el.classList.add('on');
-    document.querySelectorAll('.caption-item').forEach(x=>x.classList.remove('active'));
-    const ci=document.getElementById(`cap-${c.id}`);
-    if(ci) ci.classList.add('active');
   } else {
     el.classList.remove('on');
-    document.querySelectorAll('.caption-item').forEach(x=>x.classList.remove('active'));
   }
 }
 

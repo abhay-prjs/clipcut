@@ -396,7 +396,6 @@ function mergeCuts(threshold=0.3){
 }
 
 function applyCuts(){
-  console.log('applyCuts called', S.cuts.length);
   const selectedCuts=S.cuts.filter(c=>c.selected)
     .sort((a,b)=>a.start-b.start);
   if(!selectedCuts.length){toast('No cuts selected');return;}
@@ -606,19 +605,6 @@ function applySilenceRemoval(){
   renderAllFindings();
   renderTimeline();
   closeModal('silenceModal');
-}
-
-function updateSilenceList(){
-  const el=document.getElementById('silenceList');
-  if(!el) return;
-  const audioSegs=S.cuts.filter(c=>c._src==='audio'||c._src==='dead');
-  if(!audioSegs.length){el.innerHTML='<div class="empty-state">No segments yet</div>';return;}
-  el.innerHTML=audioSegs.map(s=>`
-    <div class="silence-item ${s.selected?'cut':'kept'}">
-      <div class="sil-time">${s.start.toFixed(2)}s→${s.end.toFixed(2)}s</div>
-      <div class="sil-dur">${(s.end-s.start).toFixed(2)}s</div>
-      <button class="sil-toggle" onclick="toggleCutSelected('${s.id}')">${s.selected?'✕':'✓'}</button>
-    </div>`).join('');
 }
 
 function toggleSilenceVis(){

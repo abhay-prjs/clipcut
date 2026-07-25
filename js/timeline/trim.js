@@ -103,14 +103,6 @@ document.addEventListener('mousemove',e=>{
         if(dragTrimMode==='out') video.currentTime=S.trimOut;
       }
       ph.style.left=(video.currentTime*S.zoom)+'px';
-      const shadeL=document.querySelector('.trsh.l');
-      const shadeR=document.querySelector('.trsh.r');
-      const trinL =document.querySelector('.trin.l');
-      const trinR =document.querySelector('.trin.r');
-      if(shadeL) shadeL.style.width=(S.trimIn*S.zoom)+'px';
-      if(trinL)  trinL.style.left =(S.trimIn*S.zoom)+'px';
-      if(shadeR) shadeR.style.left=((S.trimOut*S.zoom)+1)+'px';
-      if(trinR)  trinR.style.left =(S.trimOut*S.zoom)+'px';
     }
     updateTrimUI();
     return;

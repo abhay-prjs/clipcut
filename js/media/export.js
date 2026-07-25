@@ -242,16 +242,12 @@ async function _doFlaskExport(){
     });
 
     // Finish — download blob, then either write via FS API, save via Flask path, or browser download
-    console.log('[export] dirHandle:', !!_exportDirHandle, '| saveFolder:', saveFolder);
     _setExportLabel(_exportDirHandle ? `Saving to ${_exportDirHandle.name}…` : saveFolder ? 'Saving to folder…' : 'Downloading…');
     const dlResp = await fetch(`${getWhisperBase()}/export/download/${_exportJobId}`);
-    console.log('[export] download resp:', dlResp.status, dlResp.headers.get('Content-Length'));
     if(!dlResp.ok) throw new Error('Download failed '+dlResp.status);
 
     if(_exportDirHandle){
-      console.log('[export] path: FS API dir handle');
       const blob = await dlResp.blob();
-      console.log('[export] blob size:', blob.size);
       try{
         const fh = await _exportDirHandle.getFileHandle(outputName, {create:true});
         const wr = await fh.createWritable();
@@ -273,14 +269,12 @@ async function _doFlaskExport(){
       }
     } else {
       const savedTo = dlResp.headers.get('X-Saved-To');
-      console.log('[export] path: blob download | X-Saved-To:', savedTo);
       if(savedTo){
         _setExportProgress(100, 0, 'done');
         _setExportLabel(`✓ Saved to ${savedTo}`);
         toast(`✓ Saved: ${savedTo}`);
       } else {
         const blob = await dlResp.blob();
-        console.log('[export] blob size:', blob.size, '| triggering download');
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href = url; a.download = outputName;

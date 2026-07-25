@@ -117,7 +117,5 @@ async function transcribeWithWhisper(){
   }
 }
 
-// legacy stubs so nothing breaks
-function openCaptionAI(){ switchTab('captions'); toast('Use the Transcribe button above ↑'); }
+// legacy stub — captionModal's Generate button still calls this
 function generateAICaptions(){ transcribeWithWhisper(); }
-function saveApiKey(){}

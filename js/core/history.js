@@ -77,7 +77,7 @@ function _applySnapshot(snap){
   }
   buildPlaySegments();
   renderClipList(); updateCaptionList(); updateTrimUI();
-  updateSilenceList(); renderAllFindings(); sliceWaveforms(); renderTimeline();
+  renderAllFindings(); sliceWaveforms(); renderTimeline();
 }
 
 function undo(){

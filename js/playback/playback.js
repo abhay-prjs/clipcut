@@ -207,6 +207,8 @@ function toggleFlip(d){
   if(d==='h') S.flipH=!S.flipH;
   else S.flipV=!S.flipV;
   video.style.transform=`scaleX(${S.flipH?-1:1}) scaleY(${S.flipV?-1:1})`;
+  document.getElementById('flipH').classList.toggle('active',S.flipH);
+  document.getElementById('flipV').classList.toggle('active',S.flipV);
 }
 
 // ═══════════════════════════════════════
@@ -250,7 +252,6 @@ function buildPlaySegments(){
     // Nothing to skip, no applied cuts — play full clip
     S.playSegments = [{start: S.trimIn||0, end: S.trimOut||S.duration, timelineStart: 0}];
     S.currentSegmentIdx = 0;
-    console.log('[ClipCut] buildPlaySegments →', S.playSegments.length, 'segments', S.playSegments);
     return S.playSegments;
   }
 
@@ -277,7 +278,6 @@ function buildPlaySegments(){
     return ps;
   });
   S.currentSegmentIdx = 0;
-  console.log('[ClipCut] buildPlaySegments →', S.playSegments.length, 'segments', S.playSegments);
   return S.playSegments;
 }
 
