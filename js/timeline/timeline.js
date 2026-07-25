@@ -117,8 +117,13 @@ function renderTimeline(){
     // Selected cuts → red gap zones on video + waveform rows (only before snap)
     if(!S.snapped){
       S.cuts.filter(c=>c.selected && c.type!=='highlight').forEach(cut=>{
-        const left=cut.start*zoom;
-        const width=Math.max((cut.end-cut.start)*zoom,6);
+        const tlStart=sourceTimeToTimeline(cut.start);
+        const tlEnd=sourceTimeToTimeline(cut.end);
+        if(tlStart===null && tlEnd===null) return;
+        const safeStart=tlStart ?? sourceTimeToTimeline(cut.start+0.05) ?? 0;
+        const safeEnd=tlEnd ?? sourceTimeToTimeline(cut.end-0.05) ?? safeStart+(cut.end-cut.start);
+        const left=safeStart*zoom;
+        const width=Math.max((safeEnd-safeStart)*zoom,6);
         const c=_cutColors[cut.type]||_cutColors.dead;
         const tooltip=`${cut.type||'cut'}: ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
 
@@ -181,10 +186,17 @@ function renderTimeline(){
       });
     }
 
-    // Unselected cuts → faint suggestion markers (always visible, highlights already rendered above)
-    S.cuts.filter(c=>!c.selected && c.type!=='highlight').forEach(cut=>{
-      const left=cut.start*zoom;
-      const width=Math.max((cut.end-cut.start)*zoom,6);
+    // Unselected cuts → faint suggestion markers (only before snap — same as selected cuts;
+    // once gaps are snapped closed these source-time markers no longer correspond to
+    // anything on the compacted timeline)
+    if(!S.snapped) S.cuts.filter(c=>!c.selected && c.type!=='highlight').forEach(cut=>{
+      const tlStart=sourceTimeToTimeline(cut.start);
+      const tlEnd=sourceTimeToTimeline(cut.end);
+      if(tlStart===null && tlEnd===null) return;
+      const safeStart=tlStart ?? sourceTimeToTimeline(cut.start+0.05) ?? 0;
+      const safeEnd=tlEnd ?? sourceTimeToTimeline(cut.end-0.05) ?? safeStart+(cut.end-cut.start);
+      const left=safeStart*zoom;
+      const width=Math.max((safeEnd-safeStart)*zoom,6);
       const c=_pendColors[cut.type]||_pendColors.dead;
       const tooltip=`${cut.type||'cut'}: ${cut.start.toFixed(2)}–${cut.end.toFixed(2)}s${cut.aiNote?' · '+cut.aiNote:''}`;
       const el=document.createElement('div');
@@ -201,10 +213,15 @@ function renderTimeline(){
   // ── CAPTION TRACK ───────────────────────────────────────────
   const ct=document.getElementById('captionTrack'); ct.innerHTML='';
   S.captions.forEach(c=>{
+    const tlStart=sourceTimeToTimeline(c.start);
+    const tlEnd=sourceTimeToTimeline(c.end);
+    if(tlStart===null && tlEnd===null) return;
+    const safeStart=tlStart ?? sourceTimeToTimeline(c.start+0.05) ?? 0;
+    const safeEnd=tlEnd ?? sourceTimeToTimeline(c.end-0.05) ?? safeStart+(c.end-c.start);
     const el=document.createElement('div');
     el.className='tl-clip caption';
-    el.style.left=(c.start*zoom)+'px';
-    el.style.width=Math.max((c.end-c.start)*zoom,30)+'px';
+    el.style.left=(safeStart*zoom)+'px';
+    el.style.width=Math.max((safeEnd-safeStart)*zoom,30)+'px';
     el.title=c.text;
     el.innerHTML=`💬 ${c.text.slice(0,14)}${c.text.length>14?'…':''}`;
     el.onclick=()=>seekTo(c.start);
