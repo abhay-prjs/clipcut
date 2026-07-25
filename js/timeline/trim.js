@@ -74,7 +74,7 @@ document.addEventListener('mousemove',e=>{
         const sliderWidth=document.getElementById('trimTrack').offsetWidth;
         const pxPerSec=sliderWidth/Math.max(cut.end-cut.start,0.1);
         const deltaX=e.clientX-dragCutRef.mouseX;
-        const deltaSec=(deltaX/pxPerSec)*0.5;
+        const deltaSec=deltaX/pxPerSec;
         if(dragTrimMode==='in')  cut.start=Math.max(0,           Math.min(dragCutRef.cutStart+deltaSec,cut.end-0.05));
         if(dragTrimMode==='out') cut.end  =Math.min(S.duration,  Math.max(dragCutRef.cutEnd  +deltaSec,cut.start+0.05));
         // Do NOT write to S.trimIn/S.trimOut here — those are clip-level trim state.
