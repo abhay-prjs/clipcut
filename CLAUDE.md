@@ -709,18 +709,20 @@ Segment boundary threshold: `0.05s` (tight — rVFC is called every frame, not e
 - [ ] AE plugin version (future project)
 
 ## Design System
-Apple-style dark theme (reskinned 2026-07-26 — see `git log clipcut.css` for the prior "rusty" v1 palette if ever needed):
+Solid, flat dark theme — CapCut-style panels (reskinned 2026-07-26, de-glassed
+later session — see `git log clipcut.css` for the prior "rusty" v1 palette and
+the intermediate frosted-glass/backdrop-filter version if ever needed):
 ```css
 --bg: #151517
---s1: rgba(28,28,30,.85)   /* panels, topbar — paired with backdrop-filter:blur(20px) */
---s2: rgba(255,255,255,.045) /* cards, inputs */
---s3: rgba(255,255,255,.08)  /* hover states */
---s4: rgba(255,255,255,.12)  /* deep inset */
---b1: rgba(255,255,255,.08)  /* primary borders */
---b2: rgba(255,255,255,.14)  /* secondary borders */
+--s1: #1C1C1E       /* panels, topbar, playback-bar — solid, no blur */
+--s2: #202022       /* cards, inputs */
+--s3: #2A2A2D       /* hover states */
+--s4: #333336       /* deep inset */
+--b1: #313134       /* primary borders */
+--b2: #3D3D41       /* secondary borders */
 --blue: #0A84FF     /* primary accent */
 --blue-soft: #409CFF
---blue-dim: rgba(10,132,255,.14)
+--blue-dim: rgba(10,132,255,.14)   /* tinted highlight wash — not a glass surface, just a subtle accent tint (Discord/Slack "selected" style), kept */
 --accent: #FF9F0A   /* trim handles only */
 --green: #30D158    /* config status "ok" pills */
 --red: #FF453A      /* cuts, delete, dead_air */
@@ -731,7 +733,18 @@ Apple-style dark theme (reskinned 2026-07-26 — see `git log clipcut.css` for t
 ```
 Fonts: Outfit (UI) + JetBrains Mono (mono/timecodes) — kept as-is through the reskin, not swapped for SF Pro
 Target resolution: 1920×1080 at 100% browser zoom
-Panels/topbar/timeline/playback-bar use `backdrop-filter: blur(20px)` translucency; buttons are pill/rounded (7–14px radius) rather than the old 3–5px flat rectangles
+
+**No `backdrop-filter` anywhere, no translucent panel chrome.** The original
+reskin used `backdrop-filter: blur(20px)` + `rgba()` surfaces on topbar/
+playback-bar/timeline-section/modals/toast/transcript-toolbar/aspect-badges —
+removed in a later session (explicit user ask: "get rid of this liquid glass
+type UI"). `--s1`–`--s4`/`--b1`/`--b2` are now solid opaque hex, same relative
+contrast steps as before (panel < card < hover < active), just no blur/alpha.
+**Do not reintroduce `backdrop-filter` or translucent `rgba()` panel
+backgrounds** — solid fills only for any new chrome (buttons stay pill/rounded,
+7–14px radius). `--blue-dim`/`--accent-dim` tinted-highlight washes are fine to
+keep using for selected/active states — those read as a flat-UI accent tint,
+not glass, and were kept deliberately.
 
 ## Hardware Context
 - CPU: Ryzen 5 7600X
