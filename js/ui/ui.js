@@ -117,6 +117,11 @@ document.addEventListener('keydown',e=>{
       toast('Finding removed');
       return;
     }
+    if(S.selectedSegmentId!==null){
+      jlog('key',`${keyStr} → deleteSegment()`);
+      deleteSegment();
+      return;
+    }
     jlog('key',`${keyStr} → deleteClip()`);
     deleteClip();
   }

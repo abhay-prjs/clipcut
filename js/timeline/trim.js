@@ -270,6 +270,25 @@ function _applyTrimToSegments(tIn, tOut){
   S.segments = trimmed;
 }
 
+// Removes the selected segment (the "split → delete bad half" flow —
+// Split existed via Ctrl+B but there was no way to then discard the split-off
+// piece). Recomputes timelineStart for the remaining segments so they stay
+// contiguous.
+function deleteSegment(){
+  if(S.selectedSegmentId===null) return;
+  if(S.segments.length<=1){ toast("Can't delete the only segment"); return; }
+  saveHistory();
+  S.segments = S.segments.filter(s=>s.id!==S.selectedSegmentId);
+  let cursor=0;
+  S.segments.forEach(seg=>{ seg.timelineStart=cursor; cursor+=seg.duration; });
+  S.selectedSegmentId=null;
+  buildPlaySegments();
+  sliceWaveforms();
+  renderTimeline();
+  updateTrimContext();
+  toast('✕ Segment removed');
+}
+
 // ═══════════════════════════════════════
 // ON-TIMELINE CUT DRAGGING (§C6) — grab a cut block's edges to resize,
 // or its center to move it, directly on the timeline.
