@@ -410,6 +410,24 @@ class API:
         log('DIALOG', f'✓ Folder selected: {path}' if path else 'Folder picker cancelled')
         return path
 
+    def list_video_files(self, folder_path):
+        """List video files directly inside folder_path (top-level only — no
+        recursion into subfolders, keeping a folder-link import predictable).
+        Returns absolute paths, sorted by filename."""
+        VIDEO_EXTS = ('.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.wmv', '.flv', '.ts', '.mts')
+        log('DIALOG', f'list_video_files() — scanning {folder_path}')
+        try:
+            entries = sorted(os.listdir(folder_path))
+        except OSError as e:
+            log('DIALOG', f'✕ list_video_files failed: {e}')
+            return []
+        paths = [
+            os.path.join(folder_path, name) for name in entries
+            if name.lower().endswith(VIDEO_EXTS) and os.path.isfile(os.path.join(folder_path, name))
+        ]
+        log('DIALOG', f'✓ found {len(paths)} video file(s)')
+        return paths
+
     # ── Whisper transcription ─────────────────────────────────────────────────
 
     def probe_duration(self, source_path):

@@ -75,6 +75,21 @@ async function openFileNative() {
   if(path) loadClipFromPath(path);
 }
 
+// "Link" an entire folder — pick a folder, find every video file directly
+// inside it (no subfolder recursion), and import all of them in one go via
+// the same native-path pipeline as a single Open File import (sourcePath set,
+// ffmpeg export/transcribe work immediately, no per-file dialog).
+async function onImportFolderClick() {
+  if(!window.pywebview){ toast('Folder import requires the desktop app'); return; }
+  const folder = await window.pywebview.api.pick_folder();
+  if(!folder) return;
+  toast('🔍 Scanning folder...');
+  const paths = await window.pywebview.api.list_video_files(folder);
+  if(!paths.length){ toast('No video files found in that folder'); return; }
+  paths.forEach(p => loadClipFromPath(p));
+  toast(`✓ Linked ${paths.length} clip${paths.length!==1?'s':''} from folder`);
+}
+
 // Load a clip from an absolute file path (pywebview native open).
 // sourcePath stored on clip → export/transcribe use ffmpeg directly (no browser upload).
 // Falls back to ffprobe for duration when the browser can't play the container (e.g. MOV/ProRes).
