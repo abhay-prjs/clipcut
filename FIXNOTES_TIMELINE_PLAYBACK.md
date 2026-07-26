@@ -458,13 +458,30 @@ larger feature (background nvenc render, `proxyDirty` state, PROXY/LIVE UI
 pill, bypass-playSegments-while-proxy-active logic). Worth scoping as its
 own task rather than folding into this pass.
 
-**Phase 5 — durability & headline features**
+**Phase 5 — durability & headline features** ✅ bugs #6/#8/#10(partial)/#21/#22 DONE — commits de41ea6..d5b79b5.
 #8 project save/autosave → #10 text-style state → templates → drag-in-preview →
 ASS burn-in → #6-adjacent editor feel: frame-step keys (←/→ = 1 frame), segment
 edge-drag trimming, snap-to-word-boundary while dragging cuts.
+*Not started:* templates, drag-in-preview, ASS burn-in (needs #10's remaining
+half), frame-step keys, segment edge-drag trimming.
 
 **Phase 6 — cleanup**
-#11, #12, #14, #15, #16, #17, #19.
+#11, #12(✅ done in Phase 4), #14(✅ done in Phase 1), #15, #16(✅ done in Phase 1), #17, #19.
+Remaining: #11 (delete legacy exportSRT/exportVTT), #15 (trim bar mapping),
+#17 (delete dead Flask export path), #19 (fix CLAUDE.md home_editor/ reference).
+
+**Session note — two pre-existing issues observed (not in fix notes, not fixed this pass):**
+1. Native menu unsupported in the currently installed pywebview build
+   (`module 'webview' has no attribute 'MenuAction'`) — the try/except already
+   in place catches it and the app runs without a native menu, but this means
+   the File-menu Save/Open Project entries added for bug #8 won't actually
+   appear until pywebview is upgraded. The topbar 💾/📂 buttons work regardless
+   (no menu dependency).
+2. `log()` in `serve.py` crashes with `UnicodeEncodeError` on ✓/✕ characters
+   when stdout is cp1252 (default Windows console codepage) — killed the
+   whisper auto-ping background thread during a smoke-test launch. Pre-existing,
+   unrelated to any change in this pass; `log()` should open stdout with
+   `encoding='utf-8'` or strip/replace non-ASCII before printing.
 
 ---
 
