@@ -269,3 +269,110 @@ function _applyTrimToSegments(tIn, tOut){
   }
   S.segments = trimmed;
 }
+
+// ═══════════════════════════════════════
+// ON-TIMELINE CUT DRAGGING (§C6) — grab a cut block's edges to resize,
+// or its center to move it, directly on the timeline.
+// ═══════════════════════════════════════
+
+// Candidate snap positions (timeline seconds): word boundaries, other cut
+// edges, segment edges, the playhead. Whole-second snapping is handled
+// separately (doesn't depend on app state).
+function _cutSnapTargets(excludeCutId){
+  const targets=[];
+  S.captions.forEach(c=>{
+    const s=sourceTimeToTimeline(c.start), e=sourceTimeToTimeline(c.end);
+    if(s!==null) targets.push(s);
+    if(e!==null) targets.push(e);
+  });
+  S.cuts.forEach(c=>{
+    if(c.id===excludeCutId) return;
+    const s=sourceTimeToTimeline(c.start), e=sourceTimeToTimeline(c.end);
+    if(s!==null) targets.push(s);
+    if(e!==null) targets.push(e);
+  });
+  S.segments.forEach(seg=>{
+    targets.push(seg.timelineStart);
+    targets.push(seg.timelineStart+seg.duration);
+  });
+  if(video.src){
+    const p=sourceTimeToTimeline(video.currentTime);
+    if(p!==null) targets.push(p);
+  }
+  return targets;
+}
+
+function _bindCutDrag(el, cut){
+  const EDGE=8;
+  let mode=null, startX=0, startTlStart=0, startTlEnd=0, historySaved=false;
+
+  el.addEventListener('mousemove', e=>{
+    if(mode) return; // dragging — leave cursor as set by pointerdown
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    el.style.cursor = (offsetX<=EDGE||offsetX>=rect.width-EDGE) ? 'ew-resize' : 'grab';
+  });
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.stopPropagation();
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    mode = offsetX<=EDGE ? 'resize-l' : (offsetX>=rect.width-EDGE ? 'resize-r' : 'move');
+    startX=e.clientX;
+    startTlStart=sourceTimeToTimeline(cut.start);
+    startTlEnd=sourceTimeToTimeline(cut.end);
+    historySaved=false;
+    el.setPointerCapture(e.pointerId);
+    selectCut(cut.id);
+  });
+
+  el.addEventListener('pointermove', e=>{
+    if(!mode) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    let deltaSec=(e.clientX-startX)/S.zoom;
+    if(e.shiftKey) deltaSec*=0.25;
+
+    let newTlStart=startTlStart, newTlEnd=startTlEnd;
+    if(mode==='move'){ newTlStart=startTlStart+deltaSec; newTlEnd=startTlEnd+deltaSec; }
+    else if(mode==='resize-l'){ newTlStart=Math.min(startTlStart+deltaSec, startTlEnd-0.05); }
+    else if(mode==='resize-r'){ newTlEnd=Math.max(startTlEnd+deltaSec, startTlStart+0.05); }
+    newTlStart=Math.max(0,newTlStart);
+
+    if(!e.altKey){
+      const snapSec=6/S.zoom;
+      const targets=_cutSnapTargets(cut.id);
+      const trySnap=(val)=>{
+        let best=val, bestDist=snapSec;
+        for(const t of targets){ const d=Math.abs(t-val); if(d<bestDist){bestDist=d;best=t;} }
+        const rounded=Math.round(val);
+        if(Math.abs(rounded-val)<bestDist) best=rounded;
+        return best;
+      };
+      if(mode==='move'){ const s=trySnap(newTlStart); newTlEnd+=(s-newTlStart); newTlStart=s; }
+      else if(mode==='resize-l') newTlStart=trySnap(newTlStart);
+      else if(mode==='resize-r') newTlEnd=trySnap(newTlEnd);
+    }
+
+    el.style.left=(newTlStart*S.zoom)+'px';
+    el.style.width=Math.max((newTlEnd-newTlStart)*S.zoom,6)+'px';
+    cut._dragTlStart=newTlStart; cut._dragTlEnd=newTlEnd;
+    const srcStart=timelineToSourceTime(newTlStart), srcEnd=timelineToSourceTime(newTlEnd);
+    document.getElementById('trimInLbl').textContent=srcStart.toFixed(2)+'s';
+    document.getElementById('trimOutLbl').textContent=srcEnd.toFixed(2)+'s';
+    document.getElementById('trimContextDur').textContent=(srcEnd-srcStart).toFixed(2)+'s';
+  });
+
+  el.addEventListener('pointerup', e=>{
+    if(!mode) return;
+    if(cut._dragTlStart!=null){
+      cut.start=timelineToSourceTime(cut._dragTlStart);
+      cut.end=timelineToSourceTime(cut._dragTlEnd);
+      delete cut._dragTlStart; delete cut._dragTlEnd;
+      buildPlaySegments();
+      if(video.src) video.currentTime=cut.start;
+    }
+    mode=null; historySaved=false;
+    renderTimeline();
+  });
+}

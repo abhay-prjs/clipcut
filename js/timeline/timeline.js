@@ -115,6 +115,7 @@ function renderTimeline(){
           e.stopPropagation();
           selectCut(cut.id);
         });
+        _bindCutDrag(el, cut);
         if(width>30){
           const lbl=document.createElement('span');
           lbl.className='tl-cut-label';
