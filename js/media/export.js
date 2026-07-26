@@ -115,7 +115,12 @@ async function _doPywebviewExport(){
       _exportBurnCap ? JSON.stringify(S.captions) : '[]',
       _exportBurnCap ? JSON.stringify(segMeta) : '[]',
       S.aspect,
-      S.aspectMode
+      S.aspectMode,
+      // S.textStyle + the live preview element's rendered height — lets
+      // _generate_ass() (serve.py) scale font/stroke proportionally from
+      // "px in the preview box" to "px in the actual exported frame"
+      _exportBurnCap ? JSON.stringify(S.textStyle) : '{}',
+      _exportBurnCap ? (video.clientHeight||0) : 0
     );
 
     if(!result || result.error === 'cancelled') {

@@ -277,7 +277,7 @@ def _aspect_filter(aspect, mode):
     h = f"trunc(min(ih,iw*{th}/{tw})/2)*2"
     return f"crop='{w}':'{h}'"
 
-def _make_filter_complex(segments, flip_filter, srt_path=None, aspect_filter=''):
+def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter=''):
     parts = []
     for i, seg in enumerate(segments):
         s, e = round(seg["start"], 3), round(seg["end"], 3)
@@ -287,8 +287,8 @@ def _make_filter_complex(segments, flip_filter, srt_path=None, aspect_filter='')
     interleaved = "".join(f"[v{i}][a{i}]" for i in range(n))
     parts.append(f"{interleaved}concat=n={n}:v=1:a=1[outv][outa]")
     out_v = "[outv]"
-    if srt_path:
-        esc = srt_path.replace("\\", "/").replace(":", "\\:")
+    if sub_path:
+        esc = sub_path.replace("\\", "/").replace(":", "\\:")
         parts.append(f"[outv]subtitles='{esc}'[subv]")
         out_v = "[subv]"
     if aspect_filter:
@@ -299,7 +299,101 @@ def _make_filter_complex(segments, flip_filter, srt_path=None, aspect_filter='')
         out_v = "[fv]"
     return ";".join(parts), out_v
 
-def _generate_srt(captions, seg_meta):
+def _probe_dimensions(source_path):
+    """ffprobe video width/height. Falls back to 1920x1080 on failure."""
+    result = subprocess.run(
+        ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+         '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', source_path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    try:
+        w_s, h_s = result.stdout.strip().split('x')
+        return int(w_s), int(h_s)
+    except Exception:
+        return 1920, 1080
+
+def _compute_output_dims(source_path, aspect, aspect_mode):
+    """Source dimensions after the same crop/pad math _aspect_filter() applies
+    — needed so ASS PlayResX/Y (and therefore burned-in caption position/size)
+    match the actual exported frame, not the source frame."""
+    w, h = _probe_dimensions(source_path)
+    if not aspect:
+        return w, h
+    try:
+        tw_s, th_s = aspect.split('/')
+        tw, th = float(tw_s), float(th_s)
+        if tw <= 0 or th <= 0:
+            return w, h
+    except Exception:
+        return w, h
+    if aspect_mode == 'pad':
+        ow = int(max(w, h * tw / th) // 2 * 2)
+        oh = int(max(h, w * th / tw) // 2 * 2)
+    else:
+        ow = int(min(w, h * tw / th) // 2 * 2)
+        oh = int(min(h, w * th / tw) // 2 * 2)
+    return ow, oh
+
+def _hex_to_ass_color(hex_color, alpha=0):
+    """'#rrggbb' -> ASS &HAABBGGRR (note reversed byte order vs standard RGB,
+    alpha 0=opaque/255=transparent — opposite of CSS alpha)."""
+    hex_color = (hex_color or '#ffffff').lstrip('#')
+    if len(hex_color) != 6:
+        hex_color = 'ffffff'
+    r, g, b = hex_color[0:2], hex_color[2:4], hex_color[4:6]
+    return f'&H{alpha:02X}{b}{g}{r}'.upper()
+
+def _parse_bg_color(bg):
+    """Caption-style background dropdown value ('rgba(r,g,b,a)', 'transparent',
+    or '') -> (ass_back_colour, has_opaque_box). Values come from the fixed
+    preset list in clipcut.html (Black/Lime/Red/None)."""
+    if not bg or bg == 'transparent':
+        return '&H00000000', False
+    m = re.match(r'rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\)', bg)
+    if not m:
+        return '&H00000000', False
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    a = float(m.group(4)) if m.group(4) else 1.0
+    ass_alpha = int(round((1 - a) * 255))
+    return f'&H{ass_alpha:02X}{b:02X}{g:02X}{r:02X}'.upper(), True
+
+def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h):
+    """Build an ASS subtitle file from S.textStyle so burned-in export
+    captions match the Captions inspector tab's font/size/color/stroke/
+    position instead of always rendering plain text (bug #10's remaining half).
+
+    Font size/stroke are set in the browser as CSS px against the on-screen
+    preview element, which is a different pixel size than the actual export
+    resolution — preview_height_px (video.clientHeight at export time) lets
+    us scale them proportionally to out_h instead of baking in the preview's
+    literal pixel values. posX/posY are already percentages, so they map
+    directly to out_w/out_h with no scaling needed.
+
+    Known limitation: fontFamily only works if that font is installed on the
+    machine running ffmpeg. The fixed preset list (Outfit, JetBrains Mono,
+    Arial Black, Georgia, Impact) and any font loaded via "+ Load Font" in the
+    browser are not guaranteed to be — bundling the actual font file via the
+    subtitles filter's fontsdir= option is a separate follow-up.
+    """
+    scale = (out_h / preview_height_px) if preview_height_px and preview_height_px > 0 else 1.0
+    font_size = max(1, int(round((text_style.get('fontSize') or 15) * scale)))
+
+    stroke_on  = bool(text_style.get('strokeEnabled'))
+    outline_px = ((text_style.get('strokeThickness') or 0) * scale) if stroke_on else 0
+
+    weight = str(text_style.get('fontWeight') or '700')
+    bold = -1 if (weight.isdigit() and int(weight) >= 600) or weight == 'bold' else 0
+
+    font_name = (text_style.get('fontFamily') or 'Outfit').split(',')[0].strip("'\" ")
+
+    primary_color = _hex_to_ass_color(text_style.get('color') or '#ffffff')
+    outline_color = _hex_to_ass_color(text_style.get('strokeColor') or '#000000')
+    back_color, has_bg = _parse_bg_color(text_style.get('background') or '')
+    border_style = 3 if has_bg else 1  # 3 = opaque box, 1 = outline+shadow
+
+    pos_x = (text_style.get('posX') if text_style.get('posX') is not None else 50) / 100 * out_w
+    pos_y = out_h - ((text_style.get('posY') if text_style.get('posY') is not None else 14) / 100 * out_h)
+
     def src_to_tl(t):
         for seg in seg_meta:
             if seg["sourceStart"] <= t <= seg["sourceEnd"]:
@@ -309,9 +403,26 @@ def _generate_srt(captions, seg_meta):
     def fmt(s):
         h, m = int(s // 3600), int((s % 3600) // 60)
         sec = s % 60
-        return f"{h:02d}:{m:02d}:{int(sec):02d},{int(round((sec % 1) * 1000)):03d}"
+        return f"{h:d}:{m:02d}:{sec:05.2f}"
 
-    lines, idx = [], 1
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        f"PlayResX: {out_w}\n"
+        f"PlayResY: {out_h}\n"
+        "WrapStyle: 2\n"
+        "ScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Default,{font_name},{font_size},{primary_color},&H000000FF,{outline_color},{back_color},"
+        f"{bold},0,0,0,100,100,0,0,{border_style},{outline_px:.1f},0,2,10,10,10,1\n\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+
+    lines = [header]
     for cap in captions:
         ts = src_to_tl(cap["start"])
         if ts is None:
@@ -319,8 +430,13 @@ def _generate_srt(captions, seg_meta):
         te = src_to_tl(cap["end"])
         if te is None:
             te = ts + (cap["end"] - cap["start"])
-        lines += [str(idx), f"{fmt(ts)} --> {fmt(te)}", cap["text"], ""]
-        idx += 1
+        text = (cap.get("text") or "").replace("\n", "\\N").replace("{", "(").replace("}", ")")
+        # \an2 (bottom-center anchor) + \pos() overrides the style's own
+        # alignment/margins — matches the live overlay's left:X%/bottom:Y%
+        lines.append(
+            f"Dialogue: 0,{fmt(ts)},{fmt(te)},Default,,0,0,0,,"
+            f"{{\\an2\\pos({pos_x:.1f},{pos_y:.1f})}}{text}"
+        )
     return "\n".join(lines)
 
 
@@ -949,7 +1065,8 @@ class API:
     def export_video(self, source_path, segments_json, output_name,
                      preset='fast', flip_h=False, flip_v=False,
                      burn_captions=False, captions_json='[]', seg_meta_json='[]',
-                     aspect='', aspect_mode='crop'):
+                     aspect='', aspect_mode='crop',
+                     text_style_json='{}', preview_height_px=0):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -958,7 +1075,10 @@ class API:
           - Multi segment   → extract each segment (hwaccel) then concat -c copy
 
         Fallback (burn_captions=True):
-          - filter_complex single-pass with SRT overlay
+          - filter_complex single-pass with ASS caption overlay (styled —
+            see _generate_ass; text_style_json/preview_height_px let the
+            burned-in captions match S.textStyle from the Captions inspector
+            tab instead of always rendering plain SRT text)
 
         aspect: target ratio like '9/16', or '' to export at source aspect
         (bug #21 — export previously ignored the preview's aspect entirely).
@@ -969,7 +1089,8 @@ class API:
                 source_path, segments_json, output_name,
                 preset, flip_h, flip_v,
                 burn_captions, captions_json, seg_meta_json,
-                aspect, aspect_mode
+                aspect, aspect_mode,
+                text_style_json, preview_height_px
             )
         except Exception as exc:
             import traceback
@@ -980,7 +1101,8 @@ class API:
     def _export_video_inner(self, source_path, segments_json, output_name,
                             preset, flip_h, flip_v,
                             burn_captions, captions_json, seg_meta_json,
-                            aspect='', aspect_mode='crop'):
+                            aspect='', aspect_mode='crop',
+                            text_style_json='{}', preview_height_px=0):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1023,10 +1145,12 @@ class API:
             (f'  aspect_filter: {aspect_filter}' if aspect_filter else ''))
 
         if burn_captions:
-            log('EXPORT', 'Mode: filter_complex + SRT burn-in (single-pass)')
+            log('EXPORT', 'Mode: filter_complex + styled ASS burn-in (single-pass)')
             return self._export_burnin(
                 source_path, segments, save_path, p, flip_filter,
-                json.loads(captions_json), json.loads(seg_meta_json), aspect_filter
+                json.loads(captions_json), json.loads(seg_meta_json), aspect_filter,
+                json.loads(text_style_json or '{}'), preview_height_px,
+                aspect, aspect_mode
             )
 
         t_start = time.time()
@@ -1213,25 +1337,28 @@ class API:
         )
         return self._run_ffmpeg(cmd, seg_us, pct_start, pct_end)
 
-    def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta, aspect_filter=''):
-        """filter_complex single-pass with SRT caption burn-in."""
+    def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta,
+                       aspect_filter='', text_style=None, preview_height_px=0,
+                       aspect='', aspect_mode='crop'):
+        """filter_complex single-pass with styled ASS caption burn-in."""
         total_dur = sum(seg['end'] - seg['start'] for seg in segments)
         total_us  = int(total_dur * 1_000_000)
 
-        srt_path = None
+        ass_path = None
         try:
             if captions and seg_meta:
-                log('EXPORT', f'Generating SRT ({len(captions)} captions)...')
-                srt = _generate_srt(captions, seg_meta)
+                out_w, out_h = _compute_output_dims(source_path, aspect, aspect_mode)
+                log('EXPORT', f'Generating ASS ({len(captions)} captions, {out_w}x{out_h})...')
+                ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h)
                 tmp = tempfile.NamedTemporaryFile(
-                    suffix='.srt', delete=False, mode='w', encoding='utf-8'
+                    suffix='.ass', delete=False, mode='w', encoding='utf-8'
                 )
-                tmp.write(srt)
+                tmp.write(ass)
                 tmp.close()
-                srt_path = tmp.name
-                log('EXPORT', f'SRT written: {srt_path}')
+                ass_path = tmp.name
+                log('EXPORT', f'ASS written: {ass_path}')
         except Exception as e:
-            log('EXPORT', f'SRT generation failed: {e}')
+            log('EXPORT', f'ASS generation failed: {e}')
 
         prog_flags = ['-progress', 'pipe:1', '-nostats', '-threads', '0']
 
@@ -1239,8 +1366,8 @@ class API:
             seg = segments[0]
             dur = round(seg['end'] - seg['start'], 3)
             vf  = []
-            if srt_path:
-                esc = srt_path.replace('\\', '/').replace(':', '\\:')
+            if ass_path:
+                esc = ass_path.replace('\\', '/').replace(':', '\\:')
                 vf.append(f"subtitles='{esc}'")
             if aspect_filter:
                 vf.append(aspect_filter)
@@ -1253,8 +1380,8 @@ class API:
             cmd_cpu = base + vf_args + _x264_args(p)  + ['-c:a', 'aac', save_path]
         else:
             base           = ['ffmpeg', '-y', '-i', source_path] + prog_flags
-            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, srt_path, aspect_filter)
-            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, srt_path, aspect_filter)
+            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter)
+            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter)
             cmd_gpu = (base + ['-filter_complex', fc_gpu, '-map', ov_gpu, '-map', '[outa]']
                        + _nvenc_args(p) + ['-c:a', 'aac', save_path])
             cmd_cpu = (base + ['-filter_complex', fc_cpu, '-map', ov_cpu, '-map', '[outa]']
@@ -1266,9 +1393,9 @@ class API:
             log('EXPORT', '✕ GPU burnin failed — retrying CPU')
             ok, err = self._run_ffmpeg(cmd_cpu, total_us, 0, 100)
 
-        if srt_path:
+        if ass_path:
             try:
-                os.unlink(srt_path)
+                os.unlink(ass_path)
             except Exception:
                 pass
 

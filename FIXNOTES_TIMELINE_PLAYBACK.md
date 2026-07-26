@@ -377,7 +377,7 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 | 7 | ● | ~~`serve.py:1243,1248`~~ | ✅ FIXED (9cfa04a) | Native menu called `deleteSelectedCut()`/`zoomToFit()` — extracted both into named JS functions shared with keydown/dblclick handlers |
 | 8 | ● | ~~— (absent)~~ | ✅ FIXED (1fac48a, b76282e) | No project save/load — added `.ccproj` save/open (native dialogs), 30s autosave, startup recovery prompt; wired into topbar + File menu |
 | 9 | ● | ~~`js/timeline/trim.js:77`~~ | ✅ FIXED (a20bea4) | Cut-handle drag multiplied delta by 0.5 — removed the factor |
-| 10 | ● | ~~`js/captions/captions.js` (styling fns)~~ | ⚠ PARTIALLY FIXED (e2010ff) | Caption styling moved from inline-DOM-only into `S.textStyle` (now undoable, persisted, single source of truth via `_applyTextStyle()`). **Still not passed to export** — burn-in still renders plain SRT text; needs an ASS-generation pass (font/size/color/outline/position → ASS style directives, swap `subtitles=` to consume it) — bigger, separate task tied to Part F4's karaoke captions work |
+| 10 | ● | ~~`js/captions/captions.js` (styling fns)~~ | ✅ FIXED (e2010ff + later session) | Caption styling moved from inline-DOM-only into `S.textStyle` (undoable, persisted, single source of truth via `_applyTextStyle()`). Second half done later: burn-in now generates a styled ASS file (`_generate_ass()` in serve.py) instead of plain-text SRT — font/size/weight/color/stroke/background/position all carry through, scaled from browser-preview px to actual export resolution via `preview_height_px`. Word-highlight/karaoke ASS (`\k` tags) is still future work, tracked separately under Part F4 |
 | 11 | ● | ~~`js/media/export.js:425–450` vs `captions.js:307`~~ | ✅ FIXED (d0f9306) | Two SRT/VTT exporters — the persistent Export footer called the legacy raw-timestamp pair; repointed at `exportCaptions()`, deleted the legacy pair |
 | 12 | ○ | ~~`js/captions/captions.js:8`~~ | ✅ FIXED (91eeb7c) | `_captionFps` was hardcoded 30 — now probed via ffprobe at import (`probe_fps()`) and synced on clip select |
 | 13 | ○ | ~~`js/timeline/timeline.js:273`~~ | ✅ FIXED (b60436f) | `handleTLClick` in a pre-snap gap resolved to *last* segment's end (assignment inside loop) instead of nearest boundary — now finds surrounding segments and snaps to the nearer edge |
@@ -468,18 +468,19 @@ own task rather than folding into this pass.
 #8 project save/autosave → #10 text-style state → templates → drag-in-preview →
 ASS burn-in → #6-adjacent editor feel: frame-step keys (←/→ = 1 frame), segment
 edge-drag trimming, snap-to-word-boundary while dragging cuts.
-*Not started:* templates, drag-in-preview, ASS burn-in (needs #10's remaining
-half), frame-step keys, segment edge-drag trimming.
+*Not started:* templates, drag-in-preview, frame-step keys, segment edge-drag
+trimming. *ASS burn-in (#10's remaining half) done in a later session —
+see the bug #10 row above.*
 
 **Phase 6 — cleanup** ✅ DONE — commits d0f9306..34616f6 (plus #12/#14/#16 done earlier in Phases 1/4).
 #11, #12, #14, #15, #16, #17, #19 — all 7 done.
 
 ## ALL 22 BUGS ADDRESSED
-20 fully fixed, 2 partial with documented follow-ups (gap hatching in Part C
-needs a segment-model change; caption export styling needs an ASS pipeline).
-Phases 1-6 complete. Remaining scope is Phase 7 (Part F product roadmap) and
-the two explicitly-deferred larger items: the preview-proxy render (Phase 4)
-and full timeline virtualization for cuts/captions (Phase 3).
+20 fully fixed at the time, 2 partial (gap hatching, caption export ASS
+styling) — both since completed in a later session, so all 22 are now fully
+resolved. Phases 1-6 complete. Remaining scope is Phase 7 (Part F product
+roadmap) and the preview-proxy render (Phase 4) and full timeline
+virtualization for cuts/captions (Phase 3), still not started.
 
 **Session note — two pre-existing issues observed (not in fix notes, not fixed this pass):**
 1. ✅ FIXED (later session) — `webview.MenuAction`/`webview.MenuSeparator` raised

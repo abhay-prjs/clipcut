@@ -80,7 +80,7 @@ docs/backups predating the 2026-07-26 rename may still say otherwise).
     │   └── ai.js           # AI chat, script analysis, model selector, token guard, provider switcher
     ├── media/
     │   ├── import.js       # loadClip(), selectClip(), loadClipFromPath(), openFileNative()
-    │   └── export.js       # startExport(), _doPywebviewExport(), _doFlaskExport(), exportFrame()
+    │   └── export.js       # startExport(), _doPywebviewExport(), _doWebMExport(), exportFrame()
     ├── playback/
     │   └── playback.js     # togglePlay(), rVFC loop, buildPlaySegments(), getPlayheadPosition(), sourceTimeToTimeline(), tc(), fmt(), clamp()
     ├── timeline/
@@ -198,7 +198,10 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `mediapipe_detect(source_path, lip_threshold, min_speaking_ms, frame_skip)` → `{speaking_segments, cuts, count, duration}` — MediaPipe FaceMesh lip aperture; inverts speaking → dead_air cuts
 - `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
 - `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
-- `export_video(...)` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`
+- `export_video(..., text_style_json='{}', preview_height_px=0)` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. The last two params only matter when `burn_captions=True` — see `_generate_ass()` below
+- `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h)` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here
+- `_compute_output_dims(source_path, aspect, aspect_mode)` / `_probe_dimensions(source_path)` — ffprobes source resolution and replicates `_aspect_filter()`'s crop/pad math to get the actual exported frame size (needed for ASS `PlayResX/Y`)
+- `_hex_to_ass_color()` / `_parse_bg_color()` — CSS hex/rgba → ASS `&HAABBGGRR` color string conversion (note ASS reverses RGB byte order and inverts alpha vs CSS)
 - `cancel_export()` → sets `_export_cancelled = True`
 - `log_js(level, msg)` → routes JS logs to terminal with `[HH:MM:SS] [JS/LEVEL]` prefix
 
@@ -439,8 +442,8 @@ is currently showing gap-hatched cuts pre-snap.
 - `onImportFolderClick()` — "📁 Import Folder" button (Media tab, pywebview only). `pick_folder()` → `list_video_files()` → `loadClipFromPath()` for every file found (top-level only, no subfolder recursion) — links a whole folder of clips in one go via the same native-path pipeline as a single Open File import
 
 **js/media/export.js**
-- `startExport()` — routes to pywebview or Flask export based on context
-- `_doPywebviewExport()` — export via pywebview API (no upload/download, direct ffmpeg)
+- `startExport()` — routes to pywebview export (native path) or `_doWebMExport()` (manual WebM, browser-only, no ffmpeg)
+- `_doPywebviewExport()` — export via pywebview API (no upload/download, direct ffmpeg). When burn-in captions is on, also sends `S.textStyle` + the preview `<video>`'s `clientHeight` so `_generate_ass()` can scale the style to the real output resolution
 - `_onExportProgress(pct)` — global, called by Python via evaluate_js() during export
 - `exportFrame()` — exports current frame as PNG
 
