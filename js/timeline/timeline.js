@@ -49,7 +49,11 @@ function renderTimeline(){
       e.stopPropagation();
       S.selectedSegmentId=seg.id;
       S.selectedCutId=null;
-      renderTimeline();
+      // Toggle selection classes directly instead of a full renderTimeline()
+      // rebuild (F-B2) — a selection change doesn't move or resize anything.
+      document.querySelectorAll('#videoTrack .tl-clip.selected').forEach(c=>c.classList.remove('selected'));
+      document.querySelectorAll('.tl-cut.cut-selected').forEach(c=>c.classList.remove('cut-selected'));
+      el.classList.add('selected');
       updateTrimContext();
     });
     vtFrag.appendChild(el);
@@ -222,19 +226,32 @@ function renderTimeline(){
   updateCutBadge();
 }
 
+// Stashed so the scroll handler can re-run just the ruler without a full
+// renderTimeline() (F-B1) — ticks are the single biggest DOM-node source on
+// long clips (duration/interval of them), so this is the highest-value
+// virtualization target.
+let _lastRulerParams=null;
+
 function buildRuler(totalDur,totalW,zoom){
+  _lastRulerParams={totalDur,totalW,zoom};
   const r=document.getElementById('ruler');
   r.style.width=totalW+'px'; r.innerHTML='';
   const frag=document.createDocumentFragment();
   const interval=zoom>=80?1:zoom>=40?2:zoom>=20?5:10;
-  for(let t=0;t<=totalDur;t+=interval/4){
-    const isMaj=t%interval===0;
+  const step=interval/4;
+  const margin=300; // px either side of the visible scroll window
+  const viewStart=Math.max(0,(tArea.scrollLeft-margin))/zoom;
+  const viewEnd=(tArea.scrollLeft+tArea.clientWidth+margin)/zoom;
+  const tStart=Math.max(0,Math.floor(viewStart/step)*step);
+  const tEnd=Math.min(totalDur,viewEnd);
+  for(let t=tStart;t<=tEnd;t+=step){
+    const isMaj=Math.abs(t%interval)<1e-6 || Math.abs(t%interval-interval)<1e-6;
     const m=document.createElement('div'); m.className='ruler-mark'; m.style.left=(t*zoom)+'px';
     const l=document.createElement('div'); l.className='ruler-line'+(isMaj?' maj':''); m.appendChild(l);
     if(isMaj){const n=document.createElement('div');n.className='ruler-num';n.textContent=t>=60?`${Math.floor(t/60)}:${String(Math.round(t%60)).padStart(2,'0')}`:`${t}s`;m.appendChild(n);}
     frag.appendChild(m);
   }
-  // Markers
+  // Markers — usually few, no virtualization needed
   S.markers.forEach(mk=>{
     const el=document.createElement('div');
     el.style.cssText=`position:absolute;top:0;left:${mk.t*zoom}px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;`;
@@ -243,6 +260,18 @@ function buildRuler(totalDur,totalW,zoom){
   });
   r.appendChild(frag);
 }
+
+// Re-render just the ruler as the user scrolls, rAF-throttled — avoids a
+// full renderTimeline() (segments/cuts/captions/waveform) on pure scroll.
+let _rulerScrollRafPending=false;
+tArea.addEventListener('scroll',()=>{
+  if(!_lastRulerParams || _rulerScrollRafPending) return;
+  _rulerScrollRafPending=true;
+  requestAnimationFrame(()=>{
+    _rulerScrollRafPending=false;
+    if(_lastRulerParams) buildRuler(_lastRulerParams.totalDur,_lastRulerParams.totalW,_lastRulerParams.zoom);
+  });
+});
 
 function updatePlayhead(){
   const x=getPlayheadPosition();
