@@ -422,9 +422,27 @@ playhead/whole-second, Alt=no-snap, Shift=fine-drag).
   case, but a fast drag can still push a cut out of its segment or across a
   neighbour).
 
-**Phase 3 — timeline performance (1 day)**
+**Phase 3 — timeline performance (1 day)** ✅ DONE (mostly) — commits 60f18cd..adbb36f.
 F-B1 virtualization → F-B2 layer split → F-B3/B4 batching + delegation → F-B5/B6 CSS/waveform.
 (Phase 2 already cut per-cut DOM cost 5×, so measure after it — you may only need F-B1/B2.)
+
+*Landed:* F-B5 (CSS containment), F-B6 (skip redundant waveform redraw), F-B3
+(DocumentFragment batching in ruler/cuts/captions), ruler tick virtualization
+by scroll window (the single biggest DOM-node source), segment-click selection
+no longer triggers a full `renderTimeline()` rebuild.
+*Verified not needed:* F-B7 (ruler ticks already ≥20px apart at every current
+zoom breakpoint — no scenario to clamp).
+*Deferred:*
+- **F-B4 event delegation** — conflicts with §C6's `setPointerCapture()` drag
+  on individual cut elements; revisit only if profiling after virtualization
+  still shows listener-attach cost.
+- **Cut/caption block virtualization + the full 4-way renderRuler/
+  renderSegments/renderCuts/renderCaptions dirty-flag split** — cut/caption
+  counts are already far smaller post-Part-C (1 element/cut, sentence-level
+  captions), so payoff shrank; the risk of a virtualization bug (elements
+  losing click/drag bindings as they pop in/out) needs real interactive
+  testing, not a blind pass — do as its own dedicated task if a long clip is
+  still measurably slow after everything above.
 
 **Phase 4 — playback (tuning: hours · proxy: 2–3 days)**
 A2-Option-1 tuning fixes, then the **preview proxy render** (Option 3). Add
