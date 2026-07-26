@@ -593,25 +593,35 @@ wire it here). Gate behind Deep mode; Tier 1 always runs.
 
 ### F3. Batch export + template selection
 
-The automated-factory core. CapCut has batch only in its commercial tooling —
-this is where ClipCut can be *better* for UGC.
+**✅ IMPLEMENTED (later session)**, with the "job model" prerequisite
+already satisfied by bug #22 (per-clip cuts/captions/markers/waveformData
+persist across `selectClip()` swaps — done in an earlier phase, not this
+one) — no separate `clip.templateId` field was needed since batch applies
+one chosen template to the whole run rather than per-clip.
 
-- **Job model**: each imported clip already owns `clip.segments`; add
-  `clip.cuts`, `clip.captions`, `clip.templateId` so per-clip edit state fully
-  swaps on `selectClip` (today captions/cuts are global-only — prerequisite,
-  note it). An export job = `{sourcePath, segments, captions, template,
-  preset, outName}`.
-- **Queue UI**: export modal gains a "Batch" tab — list of clips with
-  checkbox · template dropdown · status column (queued/encoding %/done/failed).
-  Naming pattern with tokens: `{name}_{template}_{date}`. Continue-on-failure,
-  per-job cancel.
-- **Backend**: `export_batch(jobs_json)` in serve.py — sequential loop over the
-  existing `_export_video` internals (nvenc serializes anyway), one native SAVE
-  → *folder* picker for the batch, progress via the existing `evaluate_js`
-  channel with a job index. Mostly plumbing, no new encode logic.
-- **Factory pipeline** (the headline): "Process All" button = for each clip:
-  Auto Mode (exists, per-clip) → Tier-1 lint auto-fixes → apply template →
-  enqueue export. Drop 10 raws, return to 10 finished verticals.
+- **Modal UI** (`#batchModal`, opened via "📦 Process All (Batch)" in the
+  Media tab): clip checklist with live per-clip status text (queued →
+  loading… → template… → auto mode… → exporting… → ✓ done / ✕ error) ·
+  one template dropdown for the whole run · Run Auto Mode / Deep checkboxes.
+  Naming pattern `{name}_{template|'clipcut'}_{date}.mp4`, sanitized.
+  Cancel checked between clips (not mid-encode — the current clip finishes).
+- **Backend**: refactored `_export_video_inner`'s encode logic out into a
+  shared `_export_video_core(..., save_path, ...)`; `export_video()` (dialog
+  path) and the new `export_video_batch_one(..., save_path, ...)` (no
+  dialog — batch computes the path itself from one `pick_folder()` call)
+  both call it. Exactly the "no new encode logic" the spec predicted — same
+  `_encode_segment`/`_encode_segment_cpu`/concat/`_export_burnin` paths,
+  just parameterized on where `save_path` comes from.
+- **Factory pipeline**: `runBatchExport()` (`js/media/batch.js`) — for each
+  checked clip: `selectClip()` → optional `applyTemplate()` → optional
+  `runAutoMode(deep)` → `runEditLint()` (Tier-1 linter, advisory only —
+  batch doesn't block or auto-fix on findings, it's meant to run
+  unattended) → export via `export_video_batch_one()`.
+- **Not done**: per-job/per-clip template override (one template for the
+  whole batch run, not F3's original per-job field); a proper job-index
+  progress channel (reuses the per-clip status text instead — good enough
+  for "which clip is it on", not a global %). **Not runtime-verified**
+  end-to-end, same caveat as the proxy render/templates work.
 
 ### F4. Templates — expanded to full UGC presets
 

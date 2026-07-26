@@ -1174,13 +1174,6 @@ class API:
                             aspect='', aspect_mode='crop',
                             text_style_json='{}', preview_height_px=0,
                             caption_mode='static'):
-        self._export_cancelled = False
-
-        log('EXPORT', f'source:       {source_path}')
-        log('EXPORT', f'output_name:  {output_name}')
-        log('EXPORT', f'preset:       {preset}  flip_h={flip_h}  flip_v={flip_v}  burn_captions={burn_captions}'
-                       f'  aspect={aspect or "source"}  aspect_mode={aspect_mode}')
-
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
@@ -1194,7 +1187,55 @@ class API:
             save_path = save_path[0]
         if not save_path.lower().endswith('.mp4'):
             save_path += '.mp4'
-        log('EXPORT', f'Save path: {save_path}')
+
+        return self._export_video_core(
+            source_path, segments_json, save_path,
+            preset, flip_h, flip_v,
+            burn_captions, captions_json, seg_meta_json,
+            aspect, aspect_mode,
+            text_style_json, preview_height_px,
+            caption_mode
+        )
+
+    def export_video_batch_one(self, source_path, segments_json, save_path,
+                               preset='fast', flip_h=False, flip_v=False,
+                               burn_captions=False, captions_json='[]', seg_meta_json='[]',
+                               aspect='', aspect_mode='crop',
+                               text_style_json='{}', preview_height_px=0,
+                               caption_mode='static'):
+        """Same encode core as export_video(), but takes save_path directly
+        instead of opening a native Save dialog — batch export (js/media/batch.js)
+        picks one destination folder up front via pick_folder() and computes
+        each clip's output filename itself, so N clips shouldn't mean N dialogs."""
+        try:
+            if not save_path.lower().endswith('.mp4'):
+                save_path += '.mp4'
+            return self._export_video_core(
+                source_path, segments_json, save_path,
+                preset, flip_h, flip_v,
+                burn_captions, captions_json, seg_meta_json,
+                aspect, aspect_mode,
+                text_style_json, preview_height_px,
+                caption_mode
+            )
+        except Exception as exc:
+            import traceback
+            log('EXPORT', f'✕ UNCAUGHT EXCEPTION (batch): {exc}')
+            log('EXPORT', traceback.format_exc())
+            return {'success': False, 'error': str(exc)}
+
+    def _export_video_core(self, source_path, segments_json, save_path,
+                           preset, flip_h, flip_v,
+                           burn_captions, captions_json, seg_meta_json,
+                           aspect='', aspect_mode='crop',
+                           text_style_json='{}', preview_height_px=0,
+                           caption_mode='static'):
+        self._export_cancelled = False
+
+        log('EXPORT', f'source:       {source_path}')
+        log('EXPORT', f'save_path:    {save_path}')
+        log('EXPORT', f'preset:       {preset}  flip_h={flip_h}  flip_v={flip_v}  burn_captions={burn_captions}'
+                       f'  aspect={aspect or "source"}  aspect_mode={aspect_mode}')
 
         segments  = json.loads(segments_json)
         if not segments:

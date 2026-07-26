@@ -198,7 +198,8 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `mediapipe_detect(source_path, lip_threshold, min_speaking_ms, frame_skip)` → `{speaking_segments, cuts, count, duration}` — MediaPipe FaceMesh lip aperture; inverts speaking → dead_air cuts
 - `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
 - `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
-- `export_video(..., text_style_json='{}', preview_height_px=0)` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. The last two params only matter when `burn_captions=True` — see `_generate_ass()` below
+- `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static')` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode` only matter when `burn_captions=True` — see `_generate_ass()` below. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic
+- `export_video_batch_one(source_path, segments_json, save_path, ...)` → same params/encode core as `export_video()` (calls the same `_export_video_core()`) but takes `save_path` directly instead of opening a native Save dialog — backs batch export (`js/media/batch.js`), where N clips need one destination folder, not N dialogs
 - `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static')` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here. `caption_mode='word-highlight'` (Part F4) renders ASS karaoke (`\k` tags per word, from `cap['words']` — per-word timestamps preserved at transcription time in whisper.js, cleared by manual edit/split in captions.js since they'd no longer match) instead of static text; falls back to static per-caption if `words` is missing
 - `list_templates()` / `save_template(name, template_json)` / `delete_template(name)` → CRUD over `templates.json` (next to config.json) — backs the Settings tab's UGC Templates section (`js/ui/templates.js`)
 - `_compute_output_dims(source_path, aspect, aspect_mode)` / `_probe_dimensions(source_path)` — ffprobes source resolution and replicates `_aspect_filter()`'s crop/pad math to get the actual exported frame size (needed for ASS `PlayResX/Y`)
@@ -454,6 +455,13 @@ is currently showing gap-hatched cuts pre-snap.
 - `_onExportProgress(pct)` — global, called by Python via evaluate_js() during export
 - `exportFrame()` — exports current frame as PNG
 
+**js/media/batch.js — Batch export / "Process All" (Part F3)**
+- `openBatchModal()` — populates the clip checklist + template dropdown, opens `#batchModal`
+- `runBatchExport()` — `pick_folder()` once, then sequentially per checked clip: `selectClip()` → optional `applyTemplate()` → optional `runAutoMode(deep)` → `runEditLint()` (advisory, doesn't block — batch is meant to run unattended) → `pywebview.api.export_video_batch_one()`. Per-clip status renders live in the modal via `_setBatchStatus()`. Each clip fully swaps live state (S.segments/S.cuts/S.captions) through the existing `selectClip()` per-clip persistence (bug #22) — there's no separate batch job/clip-state model, it reuses the same state the interactive UI uses
+- `cancelBatch()` — sets a flag checked between clips (not mid-encode) — the current clip's export still finishes
+- `_batchOutputName(clip, templateName)` — `{clipName}_{template|'clipcut'}_{date}.mp4`, sanitized
+- **Known gaps:** no per-clip template override (one template applies to the whole batch run); `selectClip()` swap is followed by a fixed `setTimeout(300ms)` rather than an awaited completion signal — consistent with `runAutoMode()`'s existing style of fixed waits between steps, not new fragility introduced here; not runtime-verified end-to-end for the same reason as the proxy render and templates work (no way to launch the actual pywebview GUI in this environment)
+
 **js/playback/playback.js**
 - `togglePlay()`, `skipTime()`, `setSpeed()`, `setVolume()` — all branch on `S.proxyActive` early (proxy has no gaps to route skip/restart logic around)
 - `buildPlaySegments()` — derives S.playSegments from S.segments for virtual playback. Also sets `S.proxyDirty=true` — anything that reaches this function changed segments/cuts, so an existing rendered proxy no longer matches
@@ -586,7 +594,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 - **Export modal:** Save folder row removed (native Save dialog handles folder+filename)
 
 ## Tab Structure — Left Panel (icon rail)
-**Media tab:** slim import button, Auto/Deep buttons, clip library grid (2-col thumbnails)
+**Media tab:** slim import button, Auto/Deep buttons, 📦 Process All (Batch) button (`openBatchModal()`, see `js/media/batch.js`), clip library grid (2-col thumbnails)
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
 **Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only), Edit Check (🔍 Check Edit → `runEditLint()`, see `js/detection/linter.js`) directly above Apply Selected Cuts
 **AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
