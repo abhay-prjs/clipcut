@@ -379,7 +379,7 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 | 9 | ● | ~~`js/timeline/trim.js:77`~~ | ✅ FIXED (a20bea4) | Cut-handle drag multiplied delta by 0.5 — removed the factor |
 | 10 | ● | `js/captions/captions.js` (styling fns) | All caption styling is inline DOM styles on `#captionOverlay` — not in `S`, not in undo, not persisted, **not passed to export** → burned-in output ignores everything you styled | Introduce `S.textStyle` / `S.textLayers[]` as source of truth (prereq for templates & drag-in-preview; see previous audit) — then generate an **ASS** file from it for burn-in (`subtitles=` filter renders ASS natively; carries font/size/color/outline/position) |
 | 11 | ● | `js/media/export.js:425–450` vs `captions.js:307` | Two SRT/VTT exporters: `exportCaptions()` (correct, cut-remapped) and legacy `exportSRT()/exportVTT()` (raw timestamps). Whichever the UI wires, one produces drifted subs after cuts | Delete the legacy pair; alias names to `exportCaptions('srt'/'vtt')` |
-| 12 | ○ | `js/captions/captions.js:8` | `_captionFps` hardcoded 30 — frame-snapping wrong for 24/25/60fps footage | Probe real fps at import (ffprobe already used for duration) and store on the clip |
+| 12 | ○ | ~~`js/captions/captions.js:8`~~ | ✅ FIXED (91eeb7c) | `_captionFps` was hardcoded 30 — now probed via ffprobe at import (`probe_fps()`) and synced on clip select |
 | 13 | ○ | ~~`js/timeline/timeline.js:273`~~ | ✅ FIXED (b60436f) | `handleTLClick` in a pre-snap gap resolved to *last* segment's end (assignment inside loop) instead of nearest boundary — now finds surrounding segments and snaps to the nearer edge |
 | 14 | ○ | ~~`js/timeline/trim.js:145`~~ | ✅ FIXED (48bd3e9) | Marquee select iterated `S.clips` using `clip.timelineStart` which nothing sets — dead selection logic removed, marquee box + click-suppression kept |
 | 15 | ○ | `js/timeline/trim.js:25` + `updateTrimUI` | Trim bar and its playhead map by `t/S.duration` — visually wrong after cuts/snap | Map through playSegments, or explicitly label the bar "source" |
@@ -444,9 +444,19 @@ zoom breakpoint — no scenario to clamp).
   testing, not a blind pass — do as its own dedicated task if a long clip is
   still measurably slow after everything above.
 
-**Phase 4 — playback (tuning: hours · proxy: 2–3 days)**
+**Phase 4 — playback (tuning: hours · proxy: 2–3 days)** — tuning ✅ DONE (commits f819559, 91eeb7c); proxy render not started.
 A2-Option-1 tuning fixes, then the **preview proxy render** (Option 3). Add
-`timelineToSourceTime()` inverse mapper as part of this.
+`timelineToSourceTime()` inverse mapper as part of this (already added in
+Phase 2's §C6 work, commit 0cef490).
+
+*Landed:* seek-storm guard (`_seekTarget`/`_jumpTo`), fps-aware segment
+boundary threshold (`max(0.05, 1/fps)`), real fps probing via ffprobe at
+import (also fixes bug #12). `skipTime()` clamping (bug #16) and the trim-bar
+undo fix (bug #20) were already done in earlier phases.
+*Not started:* the preview proxy render itself — a genuinely separate,
+larger feature (background nvenc render, `proxyDirty` state, PROXY/LIVE UI
+pill, bypass-playSegments-while-proxy-active logic). Worth scoping as its
+own task rather than folding into this pass.
 
 **Phase 5 — durability & headline features**
 #8 project save/autosave → #10 text-style state → templates → drag-in-preview →
