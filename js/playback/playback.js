@@ -326,3 +326,19 @@ function sourceTimeToTimeline(t){
   }
   return null; // inside a removed cut
 }
+
+// Inverse of sourceTimeToTimeline() — maps a timeline position back to a
+// source-file timestamp. Clamps to the nearest segment edge if the position
+// falls outside all segments (before the first / after the last).
+function timelineToSourceTime(tl){
+  if(!S.segments.length) return tl; // no cuts applied — 1:1 mapping
+  for(const seg of S.segments){
+    const segEndTl = seg.timelineStart + seg.duration;
+    if(tl >= seg.timelineStart && tl <= segEndTl){
+      return seg.sourceStart + (tl - seg.timelineStart);
+    }
+  }
+  const first = S.segments[0], last = S.segments[S.segments.length-1];
+  if(tl < first.timelineStart) return first.sourceStart;
+  return last.sourceEnd;
+}
