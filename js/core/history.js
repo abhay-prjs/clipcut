@@ -24,6 +24,7 @@ function _makeSnapshot(){
     current:           S.current ? {id:S.current.id} : null,
     aspect:            S.aspect,
     aspectMode:        S.aspectMode,
+    colorFilter:       S.colorFilter,
     textStyle:         JSON.parse(JSON.stringify(S.textStyle)),
     textLayers:        JSON.parse(JSON.stringify(S.textLayers)),
     selectedTextLayerId: S.selectedTextLayerId,
@@ -121,6 +122,7 @@ function _applySnapshot(snap){
   updateTextLayerOverlays(video.currentTime||0);
   renderImageLayerInspector();
   updateImageLayerOverlays(video.currentTime||0);
+  _applyColorFilterPreview();
 }
 
 function undo(){

@@ -277,6 +277,25 @@ def _aspect_filter(aspect, mode):
     h = f"trunc(min(ih,iw*{th}/{tw})/2)*2"
     return f"crop='{w}':'{h}'"
 
+# Color filter presets — CapCut-style "one-tap" looks. JS sends the preset
+# NAME (not a raw filter string) so the actual ffmpeg filter graph is fully
+# server-controlled; the live preview approximates each with a CSS
+# `filter:` string on the <video> element (js/ui/colorfilters.js) — close
+# enough for a preview, not pixel-identical to the ffmpeg math, since CSS
+# and ffmpeg's eq/colorbalance don't compute saturation/contrast the same way.
+COLOR_FILTER_PRESETS = {
+    'none':    '',
+    'vivid':   'eq=saturation=1.4:contrast=1.15',
+    'warm':    'eq=saturation=1.15,colorbalance=rs=0.08:gs=0.02:bs=-0.08',
+    'cool':    'eq=saturation=1.1,colorbalance=rs=-0.08:bs=0.08',
+    'bw':      'hue=s=0,eq=contrast=1.05',
+    'vintage': 'eq=saturation=0.8:contrast=0.9:brightness=0.05,colorbalance=rs=0.1:gs=0.05:bs=-0.1',
+    'moody':   'eq=contrast=1.2:saturation=0.9:brightness=-0.06,colorbalance=rs=0.05:bs=0.08',
+}
+
+def _color_filter_ffmpeg(preset):
+    return COLOR_FILTER_PRESETS.get(preset or 'none', '')
+
 # UI-friendly names -> ffmpeg xfade's actual transition names.
 XFADE_TYPES = {
     'crossfade': 'fade',
@@ -332,7 +351,7 @@ def _make_xfade_filter_complex(segments, transition_type, transition_dur):
     return ";".join(parts), "[outv]", "[outa]", cum_dur
 
 def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter='',
-                         image_layers=None, seg_meta=None, out_w=0, out_h=0):
+                         image_layers=None, seg_meta=None, out_w=0, out_h=0, color_filter=''):
     """image_layers: [{path,start,end,posX,posY,posZ}] (source time) — each
     becomes its own ffmpeg input (index 1, 2, ... — video source is input 0)
     plus an overlay stage gated by enable='between(t,...)' so it only shows
@@ -376,6 +395,9 @@ def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter='',
                 f":enable='between(t,{ts:.3f},{te:.3f})'[ov{idx}]"
             )
             out_v = f"[ov{idx}]"
+    if color_filter:
+        parts.append(f"{out_v}{color_filter}[cv]")
+        out_v = "[cv]"
     if aspect_filter:
         parts.append(f"{out_v}{aspect_filter}[av]")
         out_v = "[av]"
@@ -1294,7 +1316,7 @@ class API:
                      aspect='', aspect_mode='crop',
                      text_style_json='{}', preview_height_px=0,
                      caption_mode='static', text_layers_json='[]', image_layers_json='[]',
-                     transition_type='none', transition_duration=0.5):
+                     transition_type='none', transition_duration=0.5, color_filter='none'):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -1324,7 +1346,7 @@ class API:
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
                 caption_mode, text_layers_json, image_layers_json,
-                transition_type, transition_duration
+                transition_type, transition_duration, color_filter
             )
         except Exception as exc:
             import traceback
@@ -1338,7 +1360,7 @@ class API:
                             aspect='', aspect_mode='crop',
                             text_style_json='{}', preview_height_px=0,
                             caption_mode='static', text_layers_json='[]', image_layers_json='[]',
-                     transition_type='none', transition_duration=0.5):
+                     transition_type='none', transition_duration=0.5, color_filter='none'):
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
@@ -1360,7 +1382,7 @@ class API:
             aspect, aspect_mode,
             text_style_json, preview_height_px,
             caption_mode, text_layers_json, image_layers_json,
-                transition_type, transition_duration
+                transition_type, transition_duration, color_filter
         )
 
     def export_video_batch_one(self, source_path, segments_json, save_path,
@@ -1369,7 +1391,7 @@ class API:
                                aspect='', aspect_mode='crop',
                                text_style_json='{}', preview_height_px=0,
                                caption_mode='static', text_layers_json='[]', image_layers_json='[]',
-                     transition_type='none', transition_duration=0.5):
+                     transition_type='none', transition_duration=0.5, color_filter='none'):
         """Same encode core as export_video(), but takes save_path directly
         instead of opening a native Save dialog — batch export (js/media/batch.js)
         picks one destination folder up front via pick_folder() and computes
@@ -1384,7 +1406,7 @@ class API:
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
                 caption_mode, text_layers_json, image_layers_json,
-                transition_type, transition_duration
+                transition_type, transition_duration, color_filter
             )
         except Exception as exc:
             import traceback
@@ -1398,7 +1420,7 @@ class API:
                            aspect='', aspect_mode='crop',
                            text_style_json='{}', preview_height_px=0,
                            caption_mode='static', text_layers_json='[]', image_layers_json='[]',
-                     transition_type='none', transition_duration=0.5):
+                     transition_type='none', transition_duration=0.5, color_filter='none'):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1425,6 +1447,8 @@ class API:
             (f'  flip: {flip_filter}' if flip_filter else '') +
             (f'  aspect_filter: {aspect_filter}' if aspect_filter else ''))
 
+        color_filter_ffmpeg = _color_filter_ffmpeg(color_filter)
+
         use_transitions = transition_type and transition_type != 'none' and len(segments) > 1
         if use_transitions:
             if burn_captions:
@@ -1433,7 +1457,7 @@ class API:
             log('EXPORT', f'Mode: xfade transitions ({transition_type}, {transition_duration}s)')
             return self._export_with_transitions(
                 source_path, segments, save_path, p, flip_filter,
-                aspect_filter, transition_type, transition_duration
+                aspect_filter, transition_type, transition_duration, color_filter_ffmpeg
             )
 
         if burn_captions:
@@ -1443,7 +1467,7 @@ class API:
                 json.loads(captions_json), json.loads(seg_meta_json), aspect_filter,
                 json.loads(text_style_json or '{}'), preview_height_px,
                 aspect, aspect_mode, caption_mode, json.loads(text_layers_json or '[]'),
-                json.loads(image_layers_json or '[]')
+                json.loads(image_layers_json or '[]'), color_filter_ffmpeg
             )
 
         t_start = time.time()
@@ -1455,13 +1479,13 @@ class API:
                 log('EXPORT', 'Mode: single-segment  →  direct hwaccel encode')
                 self._push_progress(0, 'Encoding (GPU)…')
                 ok, err = self._encode_segment(
-                    source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter
+                    source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter, color_filter_ffmpeg
                 )
                 if not ok and not self._export_cancelled:
                     log('EXPORT', '✕ GPU encode failed — retrying CPU')
                     self._push_progress(0, 'GPU failed — retrying CPU…')
                     ok, err = self._encode_segment_cpu(
-                        source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter
+                        source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter, color_filter_ffmpeg
                     )
             else:
                 log('EXPORT', f'Mode: two-pass  ({len(segments)} segments  →  concat copy)')
@@ -1479,14 +1503,14 @@ class API:
                     log('EXPORT', f'Encoding seg[{i}]  {seg["start"]:.3f}→{seg["end"]:.3f}s  (GPU)  {pct_start}%→{pct_end}%')
                     self._push_progress(pct_start, f'Encoding segment {i+1}/{len(segments)} (GPU)…')
                     ok, err = self._encode_segment(
-                        source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter
+                        source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter, color_filter_ffmpeg
                     )
                     if not ok and not self._export_cancelled:
                         log('EXPORT', f'✕ GPU seg[{i}] failed — retrying CPU')
                         log('EXPORT', f'stderr: {err[-300:]}')
                         self._push_progress(pct_start, f'Encoding segment {i+1}/{len(segments)} (CPU)…')
                         ok, err = self._encode_segment_cpu(
-                            source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter
+                            source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter, color_filter_ffmpeg
                         )
                     if not ok:
                         log('EXPORT', f'✕ seg[{i}] failed on both GPU and CPU')
@@ -1610,10 +1634,10 @@ class API:
             log('FFMPEG', '────────────────────────────────────────')
         return ok, stderr
 
-    def _encode_segment(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter=''):
+    def _encode_segment(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter='', color_filter=''):
         dur      = round(seg['end'] - seg['start'], 3)
         seg_us   = int(dur * 1_000_000)
-        vf_parts = [f for f in (aspect_filter, flip_filter) if f]
+        vf_parts = [f for f in (aspect_filter, color_filter, flip_filter) if f]
         vf       = ['-vf', ','.join(vf_parts)] if vf_parts else []
         cmd    = (
             ['ffmpeg', '-y', '-hwaccel', 'auto',
@@ -1625,10 +1649,10 @@ class API:
         )
         return self._run_ffmpeg(cmd, seg_us, pct_start, pct_end)
 
-    def _encode_segment_cpu(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter=''):
+    def _encode_segment_cpu(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter='', color_filter=''):
         dur      = round(seg['end'] - seg['start'], 3)
         seg_us   = int(dur * 1_000_000)
-        vf_parts = [f for f in (aspect_filter, flip_filter) if f]
+        vf_parts = [f for f in (aspect_filter, color_filter, flip_filter) if f]
         vf       = ['-vf', ','.join(vf_parts)] if vf_parts else []
         cmd    = (
             ['ffmpeg', '-y',
@@ -1643,7 +1667,7 @@ class API:
     def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta,
                        aspect_filter='', text_style=None, preview_height_px=0,
                        aspect='', aspect_mode='crop', caption_mode='static', text_layers=None,
-                       image_layers=None):
+                       image_layers=None, color_filter=''):
         """filter_complex single-pass with styled ASS caption + text-layer
         burn-in, plus image/sticker overlay compositing. Image layers force
         the multi-input filter_complex path even for a single segment —
@@ -1691,6 +1715,8 @@ class API:
             if ass_path:
                 esc = ass_path.replace('\\', '/').replace(':', '\\:')
                 vf.append(f"subtitles='{esc}'")
+            if color_filter:
+                vf.append(color_filter)
             if aspect_filter:
                 vf.append(aspect_filter)
             if flip_filter:
@@ -1704,9 +1730,9 @@ class API:
             image_input_flags = [f for pair in image_inputs for f in pair]
             base = ['ffmpeg', '-y', '-i', source_path] + image_input_flags + prog_flags
             fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter,
-                                                  image_layers, seg_meta, out_w, out_h)
+                                                  image_layers, seg_meta, out_w, out_h, color_filter)
             fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter,
-                                                  image_layers, seg_meta, out_w, out_h)
+                                                  image_layers, seg_meta, out_w, out_h, color_filter)
             cmd_gpu = (base + ['-filter_complex', fc_gpu, '-map', ov_gpu, '-map', '[outa]']
                        + _nvenc_args(p) + ['-c:a', 'aac', save_path])
             cmd_cpu = (base + ['-filter_complex', fc_cpu, '-map', ov_cpu, '-map', '[outa]']
@@ -1735,7 +1761,7 @@ class API:
         return {'success': False, 'error': err}
 
     def _export_with_transitions(self, source_path, segments, save_path, p, flip_filter,
-                                 aspect_filter, transition_type, transition_dur):
+                                 aspect_filter, transition_type, transition_dur, color_filter=''):
         """xfade/acrossfade chain between kept segments instead of a hard-cut
         concat. No ASS/caption/text-layer/image-overlay support in this path —
         see _make_xfade_filter_complex()'s docstring for why they don't mix
@@ -1746,6 +1772,9 @@ class API:
 
         parts_extra = []
         final_v = out_v
+        if color_filter:
+            parts_extra.append(f"{final_v}{color_filter}[cv]")
+            final_v = "[cv]"
         if aspect_filter:
             parts_extra.append(f"{final_v}{aspect_filter}[av]")
             final_v = "[av]"

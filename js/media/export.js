@@ -153,7 +153,8 @@ async function _doPywebviewExport(){
       // (serve.py) reads these fields directly, not nested under .style.
       burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
       _exportTransitionType,
-      _exportTransitionDur
+      _exportTransitionDur,
+      S.colorFilter
     );
 
     if(!result || result.error === 'cancelled') {

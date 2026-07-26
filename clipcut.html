@@ -327,6 +327,20 @@
     </div>
 
     <div class="prop-group">
+      <div class="prop-title">Color Filter</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="act-btn color-filter-swatch primary" onclick="setColorFilter('none',this)">None</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('vivid',this)">Vivid</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('warm',this)">Warm</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('cool',this)">Cool</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('bw',this)">B&amp;W</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('vintage',this)">Vintage</button>
+        <button class="act-btn color-filter-swatch" onclick="setColorFilter('moody',this)">Moody</button>
+      </div>
+      <div style="font-size:9px;color:var(--text3);margin-top:6px">Preview is a CSS approximation — export applies the real ffmpeg color grade</div>
+    </div>
+
+    <div class="prop-group">
       <div class="prop-title">Frame</div>
       <button class="act-btn" onclick="exportFrame()">📸 Snapshot Frame</button>
     </div>
@@ -1062,6 +1076,7 @@
 <script src="js/captions/whisper.js"></script>
 <script src="js/ui/textlayers.js"></script>
 <script src="js/ui/imagelayers.js"></script>
+<script src="js/ui/colorfilters.js"></script>
 <script src="js/detection/waveform.js"></script>
 <script src="js/detection/silence.js"></script>
 <script src="js/detection/linter.js"></script>

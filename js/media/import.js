@@ -222,4 +222,5 @@ function selectClip(id) {
   renderTimeline();
   renderTextLayerInspector();
   renderImageLayerInspector();
+  _applyColorFilterPreview();
 }

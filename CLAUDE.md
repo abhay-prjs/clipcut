@@ -92,7 +92,8 @@ docs/backups predating the 2026-07-26 rename may still say otherwise).
     │   ├── settings.js     # loadSettings(), saveSettings(), toggleSetting(), setCombineMode(), updateSettingsUI()
     │   ├── templates.js    # UGC Templates CRUD/apply (Part F4)
     │   ├── textlayers.js   # "Add Text" freeform text layers (addTextLayer(), updateTextLayerOverlays(), etc.)
-    │   └── imagelayers.js  # "+ Image" sticker/image overlays (addImageLayer(), updateImageLayerOverlays(), etc.)
+    │   ├── imagelayers.js  # "+ Image" sticker/image overlays (addImageLayer(), updateImageLayerOverlays(), etc.)
+    │   └── colorfilters.js # Color filter presets (setColorFilter(), CSS preview approximation)
     └── main.js             # Init: renderTimeline(), loadConfig(), loadSettings(), FFmpeg shim, welcome toast
 
 ### Script load order in clipcut.html
@@ -104,6 +105,7 @@ js/captions/captions.js
 js/captions/whisper.js
 js/ui/textlayers.js
 js/ui/imagelayers.js
+js/ui/colorfilters.js
 js/detection/waveform.js
 js/detection/silence.js
 js/detection/linter.js
@@ -207,7 +209,7 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `mediapipe_detect(source_path, lip_threshold, min_speaking_ms, frame_skip)` → `{speaking_segments, cuts, count, duration}` — MediaPipe FaceMesh lip aperture; inverts speaking → dead_air cuts
 - `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
 - `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
-- `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static', text_layers_json='[]', image_layers_json='[]', transition_type='none', transition_duration=0.5)` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode`/`text_layers_json`/`image_layers_json` only matter when `burn_captions=True` — see `_generate_ass()` below and `js/ui/imagelayers.js`'s CLAUDE.md entry for `image_layers_json`. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic. **`_export_video_core()` checks `transition_type` first, before `burn_captions`** — if set (and not `'none'`) it routes to `_export_with_transitions()` instead, skipping ASS/text/image burn-in entirely for that export even if `burn_captions` was also true (logged as a warning) — see `_make_xfade_filter_complex()`'s docstring for why the two don't combine yet
+- `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static', text_layers_json='[]', image_layers_json='[]', transition_type='none', transition_duration=0.5, color_filter='none')` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode`/`text_layers_json`/`image_layers_json` only matter when `burn_captions=True` — see `_generate_ass()` below and `js/ui/imagelayers.js`'s CLAUDE.md entry for `image_layers_json`. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic. **`_export_video_core()` checks `transition_type` first, before `burn_captions`** — if set (and not `'none'`) it routes to `_export_with_transitions()` instead, skipping ASS/text/image burn-in entirely for that export even if `burn_captions` was also true (logged as a warning) — see `_make_xfade_filter_complex()`'s docstring for why the two don't combine yet. `color_filter` (a preset name, resolved via `_color_filter_ffmpeg()`) applies regardless of which of the three export paths (fast/burn-in/transitions) is used — it's threaded into all of them the same way `aspect_filter`/`flip_filter` are
 - `_export_with_transitions(...)` / `_make_xfade_filter_complex(segments, transition_type, transition_dur)` — chains kept segments with ffmpeg's `xfade`/`acrossfade` instead of a hard-cut concat. `XFADE_TYPES` maps UI-friendly names (`crossfade`,`wipeleft`,`wiperight`,`zoom`,`glitch`,`dissolve`) to ffmpeg's actual transition names (`glitch`→`pixelize` — xfade has no literal glitch effect). Each junction's duration is clamped to the shorter of its two adjacent segments' own durations (not compounded across a long chain — an edge case for pathologically short segments, not handled). Total output duration shrinks by `transition_duration` per junction, since adjacent clips overlap during the crossfade instead of playing back to back — `_export_with_transitions()` computes this before starting `_run_ffmpeg()`'s progress tracking. **Scope cut, not an oversight:** no ASS/text-layer/image-overlay support in this path — those assume a plain gapless concat via `seg_meta`, which doesn't account for xfade shrinkage, so mixing both would desync caption/text/sticker timing from the real output
 - `export_video_batch_one(source_path, segments_json, save_path, ...)` → same params/encode core as `export_video()` (calls the same `_export_video_core()`) but takes `save_path` directly instead of opening a native Save dialog — backs batch export (`js/media/batch.js`), where N clips need one destination folder, not N dialogs
 - `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static')` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here. `caption_mode='word-highlight'` (Part F4) renders ASS karaoke (`\k` tags per word, from `cap['words']` — per-word timestamps preserved at transcription time in whisper.js, cleared by manual edit/split in captions.js since they'd no longer match) instead of static text; falls back to static per-caption if `words` is missing
@@ -316,6 +318,7 @@ S.selectedTextLayerId // currently selected text layer, drives the Text inspecto
 S.imageLayers      // [{id,path,url,start,end,style:{posX,posY,posZ}}] — sticker/image overlays (js/ui/imagelayers.js). Exported via real ffmpeg overlay compositing, NOT the ASS pipeline (ASS is text-only)
 S.selectedImageLayerId // currently selected image layer — mutually exclusive with S.selectedTextLayerId, both share the Text inspector tab
 S.flipH / S.flipV  // video flip state
+S.colorFilter      // 'none'|'vivid'|'warm'|'cool'|'bw'|'vintage'|'moody' — CapCut-style one-tap color grade preset (js/ui/colorfilters.js). Preview is a CSS filter: approximation; export applies the real ffmpeg eq/colorbalance filter (COLOR_FILTER_PRESETS in serve.py) server-side
 S.trimIn / S.trimOut // current trim points
 S.selectedCutId    // currently selected cut in timeline
 S.selectedSegmentId // currently selected segment
@@ -497,6 +500,11 @@ is currently showing gap-hatched cuts pre-snap.
 - `_onExportProgress(pct)` — global, called by Python via evaluate_js() during export
 - `exportFrame()` — exports current frame as PNG
 - `setExportTransition(type)` / `syncExportTransitionDur(v)` — Export modal's Transitions dropdown (None/Crossfade/Wipe Left/Wipe Right/Zoom/Glitch/Dissolve) + duration slider, sets `_exportTransitionType`/`_exportTransitionDur` and shows the "not combined with burn-in" warning whenever a transition other than `'none'` is picked
+
+**js/ui/colorfilters.js — Color filter presets**
+- `setColorFilter(name, btn)` — sets `S.colorFilter`, applies `_applyColorFilterPreview()` (sets `video.style.filter` from the `COLOR_FILTER_CSS` table). Swatch buttons live in the Video inspector tab, next to Flip
+- `_applyColorFilterPreview()` — re-called after `selectClip()` and `_applySnapshot()` (undo/redo) so the CSS filter survives a `video.src` swap
+- **Export applies the real preset server-side** — JS only ever sends the preset *name* (`S.colorFilter`) as the last `export_video`/`export_video_batch_one` param, never a raw filter string; `_color_filter_ffmpeg()` (serve.py) maps it to the actual ffmpeg `eq`/`colorbalance`/`hue` filter chain (`COLOR_FILTER_PRESETS`), applied consistently across all three export paths — fast path (per-segment, before the `-c copy` concat), `_export_burnin`, and `_export_with_transitions`. CSS and ffmpeg don't compute saturation/contrast identically, so the preview is an approximation, not pixel-identical to the export
 
 **js/media/batch.js — Batch export / "Process All" (Part F3)**
 - `openBatchModal()` — populates the clip checklist + template dropdown, opens `#batchModal`
