@@ -24,6 +24,7 @@ function _makeSnapshot(){
     current:           S.current ? {id:S.current.id} : null,
     aspect:            S.aspect,
     aspectMode:        S.aspectMode,
+    textStyle:         JSON.parse(JSON.stringify(S.textStyle)),
   };
 }
 
@@ -80,6 +81,7 @@ function _applySnapshot(snap){
   buildPlaySegments();
   renderClipList(); updateCaptionList(); updateTrimUI();
   renderAllFindings(); sliceWaveforms(); renderTimeline();
+  _applyTextStyle();
 }
 
 function undo(){

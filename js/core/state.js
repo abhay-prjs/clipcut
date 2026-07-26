@@ -37,6 +37,15 @@ const S = {
   wordsPerCap: 2,
   stripPunct: true,
   captionLayout: 'single',
+  // Caption overlay styling — source of truth (bug #10). Previously these
+  // lived only as inline styles on #captionOverlay: not undoable, not
+  // persisted, and (still, pending the ASS burn-in pipeline) not passed to
+  // export burn-in, which only renders plain text via the SRT subtitles filter.
+  textStyle: {
+    fontSize: 15, fontFamily: 'Outfit', fontWeight: '700', color: '#ffffff', background: '',
+    strokeEnabled: false, strokeThickness: 1, strokeColor: '#000000',
+    posX: 50, posY: 14, posZ: 1,
+  },
   undoStack: [], redoStack: [],
   markers: [],
   loopA: null, loopB: null, looping: false, skipCuts: true,

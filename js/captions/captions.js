@@ -420,10 +420,28 @@ function formatCaptionText(text){
   return text;
 }
 
+// Applies S.textStyle to #captionOverlay — the one place that writes these
+// inline styles, so S.textStyle (undoable, persisted) is always the source
+// of truth instead of the DOM.
+function _applyTextStyle(){
+  const el=document.getElementById('captionOverlay');
+  const ts=S.textStyle;
+  el.style.fontSize=ts.fontSize+'px';
+  el.style.fontFamily=ts.fontFamily;
+  el.style.fontWeight=ts.fontWeight;
+  el.style.color=ts.color;
+  el.style.background=ts.background;
+  el.style.webkitTextStroke=ts.strokeEnabled&&ts.strokeThickness>0?`${ts.strokeThickness}px ${ts.strokeColor}`:'';
+  el.style.left=ts.posX+'%';
+  el.style.bottom=ts.posY+'%';
+  el.style.transform=`translateX(-50%) scale(${ts.posZ})`;
+}
+
 function updateCaptionOverlay(){
   const t=video.currentTime;
   const c=S.captions.find(x=>t>=x.start&&t<=x.end);
   const el=document.getElementById('captionOverlay');
+  _applyTextStyle();
   if(c){
     el.innerHTML=formatCaptionText(c.text);
     el.style.lineHeight=S.captionLayout==='grid'?'1.2':'';
@@ -437,7 +455,18 @@ function syncFontSize(src,v){
   v=Math.max(8,parseInt(v)||15);
   document.getElementById('fontSizeSlider').value=Math.min(v,120);
   document.getElementById('fontSizeInput').value=v;
-  document.getElementById('captionOverlay').style.fontSize=v+'px';
+  S.textStyle.fontSize=v;
+  _applyTextStyle();
+}
+
+function setCaptionFont(v){
+  S.textStyle.fontFamily=v;
+  _applyTextStyle();
+}
+
+function setCaptionColor(v){
+  S.textStyle.color=v;
+  _applyTextStyle();
 }
 
 function setCaptionStyle(style){
@@ -453,45 +482,39 @@ function setCaptionLayout(layout,btn){
   btn.classList.add('primary');
 }
 
-function setCaptionSize(v){document.getElementById('captionOverlay').style.fontSize=v+'px';}
-function setCaptionBg(v){document.getElementById('captionOverlay').style.background=v;}
+function setCaptionSize(v){ S.textStyle.fontSize=parseInt(v)||15; _applyTextStyle(); }
+function setCaptionBg(v){ S.textStyle.background=v; _applyTextStyle(); }
 
 // Legacy stub — old dropdown used bottom % strings like "14%"
 function setCaptionPos(v){
   const pct=parseFloat(v)||14;
   document.getElementById('captionPosY').value=pct;
   document.getElementById('captionPosYInput').value=pct;
-  _applyCaptionTransform();
+  S.textStyle.posY=pct;
+  _applyTextStyle();
 }
 
 function syncCaptionPos(axis, val){
   val=parseFloat(val)||0;
-  const overlay=document.getElementById('captionOverlay');
   if(axis==='x'){
     val=Math.max(-50,Math.min(150,val));
     document.getElementById('captionPosX').value=Math.max(0,Math.min(100,val));
     document.getElementById('captionPosXInput').value=val;
+    S.textStyle.posX=val;
   } else if(axis==='y'){
     val=Math.max(0,Math.min(100,val));
     document.getElementById('captionPosY').value=val;
     document.getElementById('captionPosYInput').value=val;
+    S.textStyle.posY=val;
   } else if(axis==='z'){
     val=Math.max(0.1,Math.min(10,val));
     document.getElementById('captionPosZ').value=Math.min(val,3);
     document.getElementById('captionPosZInput').value=val;
+    S.textStyle.posZ=val;
   }
-  _applyCaptionTransform();
+  _applyTextStyle();
 }
 
-function _applyCaptionTransform(){
-  const x=parseFloat(document.getElementById('captionPosXInput')?.value??50);
-  const y=parseFloat(document.getElementById('captionPosYInput')?.value??14);
-  const z=parseFloat(document.getElementById('captionPosZInput')?.value??1);
-  const overlay=document.getElementById('captionOverlay');
-  overlay.style.left=x+'%';
-  overlay.style.bottom=y+'%';
-  overlay.style.transform=`translateX(-50%) scale(${z})`;
-}
 function updateWPCDisplay(){document.getElementById('wpcDisplay').textContent=S.wordsPerCap;}
 function toggleStripPunct(){
   S.stripPunct=!S.stripPunct;
@@ -500,7 +523,8 @@ function toggleStripPunct(){
   btn.classList.toggle('primary',S.stripPunct);
 }
 function setCaptionWeight(w,btn){
-  document.getElementById('captionOverlay').style.fontWeight=w;
+  S.textStyle.fontWeight=w;
+  _applyTextStyle();
   btn.closest('div').querySelectorAll('button').forEach(b=>b.classList.remove('primary'));
   btn.classList.add('primary');
 }
@@ -512,7 +536,8 @@ function toggleStroke(){
   btn.textContent=on?'ON':'OFF';
   btn.classList.toggle('primary',on);
   controls.style.display=on?'block':'none';
-  if(on) applyStroke(); else document.getElementById('captionOverlay').style.webkitTextStroke='';
+  S.textStyle.strokeEnabled=on;
+  _applyTextStyle();
 }
 
 function syncStrokeThickness(src, val){
@@ -521,13 +546,13 @@ function syncStrokeThickness(src, val){
   const input=document.getElementById('strokeThickInput');
   if(src==='slider'){ input.value=val; }
   else { slider.value=Math.min(val,20); }
-  applyStroke();
+  S.textStyle.strokeThickness=val;
+  _applyTextStyle();
 }
 
 function applyStroke(){
-  const t=parseFloat(document.getElementById('strokeThickInput')?.value||document.getElementById('strokeThickness').value)||0;
-  const c=document.getElementById('strokeColor').value;
-  document.getElementById('captionOverlay').style.webkitTextStroke=t>0?`${t}px ${c}`:'';
+  S.textStyle.strokeColor=document.getElementById('strokeColor').value;
+  _applyTextStyle();
 }
 
 async function loadCustomFont(file){
@@ -543,7 +568,8 @@ async function loadCustomFont(file){
     const sel=document.getElementById('fontSelect');
     sel.appendChild(opt);
     sel.value=fontName;
-    document.getElementById('captionOverlay').style.fontFamily=fontName;
+    S.textStyle.fontFamily=fontName;
+    _applyTextStyle();
     toast(`✓ Font loaded: ${fontName}`);
   } catch(e){
     toast(`✕ Font load failed: ${e.message}`);
