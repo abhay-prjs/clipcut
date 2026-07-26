@@ -99,6 +99,11 @@ async function _doPywebviewExport(){
   // may currently hold real pre-snap gaps (gap-hatching), which would
   // desync burned-in caption timing from the actual export.
   const segMeta = S.segments.length ? gaplessSegmentMeta() : [];
+  // "Add Text" layers only reach the exported video through the ASS burn-in
+  // path — force it on when any exist, even if the user never toggled
+  // Burn-in Captions, so text added on the timeline doesn't silently vanish
+  // from the export.
+  const burnCap = _exportBurnCap || S.textLayers.length>0;
 
   _setExportUI('running');
   _setExportLabel('Opening save dialog…');
@@ -111,17 +116,18 @@ async function _doPywebviewExport(){
       _exportPreset,
       S.flipH,
       S.flipV,
-      _exportBurnCap,
-      _exportBurnCap ? JSON.stringify(S.captions) : '[]',
-      _exportBurnCap ? JSON.stringify(segMeta) : '[]',
+      burnCap,
+      burnCap ? JSON.stringify(S.captions) : '[]',
+      burnCap ? JSON.stringify(segMeta) : '[]',
       S.aspect,
       S.aspectMode,
       // S.textStyle + the live preview element's rendered height — lets
       // _generate_ass() (serve.py) scale font/stroke proportionally from
       // "px in the preview box" to "px in the actual exported frame"
-      _exportBurnCap ? JSON.stringify(S.textStyle) : '{}',
-      _exportBurnCap ? (video.clientHeight||0) : 0,
-      S.captionMode
+      burnCap ? JSON.stringify(S.textStyle) : '{}',
+      burnCap ? (video.clientHeight||0) : 0,
+      S.captionMode,
+      burnCap ? JSON.stringify(S.textLayers) : '[]'
     );
 
     if(!result || result.error === 'cancelled') {

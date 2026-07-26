@@ -160,6 +160,7 @@ function selectClip(id) {
     S.current.waveformData = S.waveformData;
     S.current.trimIn = S.trimIn;
     S.current.trimOut = S.trimOut;
+    S.current.textLayers = S.textLayers;
   }
 
   // The rendered proxy belongs to whichever clip was active when it was
@@ -178,6 +179,8 @@ function selectClip(id) {
   S.cuts      = c.cuts || [];
   S.captions  = c.captions || [];
   S.markers   = c.markers || [];
+  S.textLayers = c.textLayers || [];
+  S.selectedTextLayerId = null;
   S.trimIn    = c.trimIn;
   S.trimOut   = c.trimOut;
   S.duration  = c.duration;
@@ -214,4 +217,5 @@ function selectClip(id) {
   updateCaptionList();
   updateTrimContext();
   renderTimeline();
+  renderTextLayerInspector();
 }

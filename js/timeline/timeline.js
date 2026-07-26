@@ -216,6 +216,30 @@ function renderTimeline(){
   });
   ct.appendChild(ctFrag);
 
+  // ── TEXT LAYERS ("Add Text") ────────────────────────────────────────
+  const tlt=document.getElementById('textLayerTrack'); tlt.innerHTML='';
+  const tltFrag=document.createDocumentFragment();
+  S.textLayers.forEach(layer=>{
+    const tlStart=sourceTimeToTimeline(layer.start);
+    const tlEnd=sourceTimeToTimeline(layer.end);
+    if(tlStart===null && tlEnd===null) return;
+    const safeStart=tlStart ?? sourceTimeToTimeline(layer.start+0.05) ?? 0;
+    const safeEnd=tlEnd ?? sourceTimeToTimeline(layer.end-0.05) ?? safeStart+(layer.end-layer.start);
+    const left=safeStart*zoom;
+    const width=Math.max((safeEnd-safeStart)*zoom,20);
+    const el=document.createElement('div');
+    el.className='tl-textlayer'+(layer.id===S.selectedTextLayerId?' selected':'');
+    el.style.left=left+'px';
+    el.style.width=width+'px';
+    el.dataset.textId=layer.id;
+    el.textContent=layer.text||'Text';
+    el.title=layer.text||'Text';
+    el.addEventListener('click',e=>{ e.stopPropagation(); selectTextLayer(layer.id); });
+    _bindTextLayerDrag(el, layer);
+    tltFrag.appendChild(el);
+  });
+  tlt.appendChild(tltFrag);
+
   // Redraw waveform only if something that affects its shape actually changed
   // (zoom, segment layout, or the waveform data itself) — posting an identical
   // draw_tl message on every render (e.g. a pure selection change) is wasted
@@ -229,7 +253,7 @@ function renderTimeline(){
     }
   }
 
-  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → playhead
+  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → textLayerTrack → playhead
   const ti=document.getElementById('tracksInner');
   [
     document.getElementById('ruler'),
@@ -237,6 +261,7 @@ function renderTimeline(){
     document.getElementById('videoTrack'),
     document.getElementById('waveformRow'),
     document.getElementById('captionTrack'),
+    document.getElementById('textLayerTrack'),
     ph,
   ].forEach(el=>ti.appendChild(el));
   updatePlayhead();

@@ -357,7 +357,56 @@ def _parse_bg_color(bg):
     ass_alpha = int(round((1 - a) * 255))
     return f'&H{ass_alpha:02X}{b:02X}{g:02X}{r:02X}'.upper(), True
 
-def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static'):
+def _generate_text_layer_dialogue(text_layers, seg_meta, out_w, out_h):
+    """Dialogue lines for freeform "Add Text" layers — each carries its own
+    font/size/color/stroke/position (per-object, not a shared style like
+    captions), so every property is an inline override rather than a named
+    Style. \\an5\\pos() = middle-center anchor, matching the live preview
+    overlay's transform:translate(-50%,-50%) at posX%/posY%. Layer=1 (above
+    captions' layer=0) so text objects render on top if they overlap in time."""
+    def src_to_tl(t):
+        for seg in seg_meta:
+            if seg["sourceStart"] <= t <= seg["sourceEnd"]:
+                return seg["timelineStart"] + (t - seg["sourceStart"])
+        return None
+
+    def fmt(s):
+        h, m = int(s // 3600), int((s % 3600) // 60)
+        sec = s % 60
+        return f"{h:d}:{m:02d}:{sec:05.2f}"
+
+    lines = []
+    for layer in text_layers:
+        ts = src_to_tl(layer["start"])
+        if ts is None:
+            continue
+        te = src_to_tl(layer["end"])
+        if te is None:
+            te = ts + (layer["end"] - layer["start"])
+
+        st = layer.get("style") or {}
+        font_name = (st.get("fontFamily") or "Outfit").split(",")[0].strip("'\" ")
+        font_size = int(st.get("fontSize") or 32)
+        weight = str(st.get("fontWeight") or "800")
+        bold = 1 if (weight.isdigit() and int(weight) >= 600) or weight == "bold" else 0
+        color = _hex_to_ass_color(st.get("color") or "#ffffff")
+        stroke_on = bool(st.get("strokeEnabled"))
+        outline_color = _hex_to_ass_color(st.get("strokeColor") or "#000000")
+        outline_px = (st.get("strokeThickness") or 0) if stroke_on else 0
+        pos_x = (st.get("posX") if st.get("posX") is not None else 50) / 100 * out_w
+        pos_y = (st.get("posY") if st.get("posY") is not None else 50) / 100 * out_h
+        text = (layer.get("text") or "").replace("\n", "\\N").replace("{", "(").replace("}", ")")
+        if not text:
+            continue
+
+        override = (
+            f"{{\\an5\\pos({pos_x:.1f},{pos_y:.1f})\\fn{font_name}\\fs{font_size}"
+            f"\\b{bold}\\c{color}\\3c{outline_color}\\bord{outline_px:.1f}}}"
+        )
+        lines.append(f"Dialogue: 1,{fmt(ts)},{fmt(te)},Default,,0,0,0,,{override}{text}")
+    return lines
+
+def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static', text_layers=None):
     """Build an ASS subtitle file from S.textStyle so burned-in export
     captions match the Captions inspector tab's font/size/color/stroke/
     position instead of always rendering plain text (bug #10's remaining half).
@@ -464,6 +513,10 @@ def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_
             f"Dialogue: 0,{fmt(ts)},{fmt(te)},Default,,0,0,0,,"
             f"{{\\an2\\pos({pos_x:.1f},{pos_y:.1f})}}{text}"
         )
+
+    if text_layers:
+        lines.extend(_generate_text_layer_dialogue(text_layers, seg_meta, out_w, out_h))
+
     return "\n".join(lines)
 
 
@@ -1135,7 +1188,7 @@ class API:
                      burn_captions=False, captions_json='[]', seg_meta_json='[]',
                      aspect='', aspect_mode='crop',
                      text_style_json='{}', preview_height_px=0,
-                     caption_mode='static'):
+                     caption_mode='static', text_layers_json='[]'):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -1144,10 +1197,12 @@ class API:
           - Multi segment   → extract each segment (hwaccel) then concat -c copy
 
         Fallback (burn_captions=True):
-          - filter_complex single-pass with ASS caption overlay (styled —
-            see _generate_ass; text_style_json/preview_height_px let the
-            burned-in captions match S.textStyle from the Captions inspector
-            tab instead of always rendering plain SRT text)
+          - filter_complex single-pass with ASS caption + text-layer overlay
+            (styled — see _generate_ass; text_style_json/preview_height_px let
+            the burned-in captions match S.textStyle from the Captions
+            inspector tab instead of always rendering plain SRT text;
+            text_layers_json carries "Add Text" freeform objects, each with
+            its own style)
 
         aspect: target ratio like '9/16', or '' to export at source aspect
         (bug #21 — export previously ignored the preview's aspect entirely).
@@ -1160,7 +1215,7 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode
+                caption_mode, text_layers_json
             )
         except Exception as exc:
             import traceback
@@ -1173,7 +1228,7 @@ class API:
                             burn_captions, captions_json, seg_meta_json,
                             aspect='', aspect_mode='crop',
                             text_style_json='{}', preview_height_px=0,
-                            caption_mode='static'):
+                            caption_mode='static', text_layers_json='[]'):
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
@@ -1194,7 +1249,7 @@ class API:
             burn_captions, captions_json, seg_meta_json,
             aspect, aspect_mode,
             text_style_json, preview_height_px,
-            caption_mode
+            caption_mode, text_layers_json
         )
 
     def export_video_batch_one(self, source_path, segments_json, save_path,
@@ -1202,7 +1257,7 @@ class API:
                                burn_captions=False, captions_json='[]', seg_meta_json='[]',
                                aspect='', aspect_mode='crop',
                                text_style_json='{}', preview_height_px=0,
-                               caption_mode='static'):
+                               caption_mode='static', text_layers_json='[]'):
         """Same encode core as export_video(), but takes save_path directly
         instead of opening a native Save dialog — batch export (js/media/batch.js)
         picks one destination folder up front via pick_folder() and computes
@@ -1216,7 +1271,7 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode
+                caption_mode, text_layers_json
             )
         except Exception as exc:
             import traceback
@@ -1229,7 +1284,7 @@ class API:
                            burn_captions, captions_json, seg_meta_json,
                            aspect='', aspect_mode='crop',
                            text_style_json='{}', preview_height_px=0,
-                           caption_mode='static'):
+                           caption_mode='static', text_layers_json='[]'):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1262,7 +1317,7 @@ class API:
                 source_path, segments, save_path, p, flip_filter,
                 json.loads(captions_json), json.loads(seg_meta_json), aspect_filter,
                 json.loads(text_style_json or '{}'), preview_height_px,
-                aspect, aspect_mode, caption_mode
+                aspect, aspect_mode, caption_mode, json.loads(text_layers_json or '[]')
             )
 
         t_start = time.time()
@@ -1461,17 +1516,17 @@ class API:
 
     def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta,
                        aspect_filter='', text_style=None, preview_height_px=0,
-                       aspect='', aspect_mode='crop', caption_mode='static'):
-        """filter_complex single-pass with styled ASS caption burn-in."""
+                       aspect='', aspect_mode='crop', caption_mode='static', text_layers=None):
+        """filter_complex single-pass with styled ASS caption + text-layer burn-in."""
         total_dur = sum(seg['end'] - seg['start'] for seg in segments)
         total_us  = int(total_dur * 1_000_000)
 
         ass_path = None
         try:
-            if captions and seg_meta:
+            if seg_meta and (captions or text_layers):
                 out_w, out_h = _compute_output_dims(source_path, aspect, aspect_mode)
-                log('EXPORT', f'Generating ASS ({len(captions)} captions, {out_w}x{out_h}, mode={caption_mode})...')
-                ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h, caption_mode)
+                log('EXPORT', f'Generating ASS ({len(captions)} captions, {len(text_layers or [])} text layers, {out_w}x{out_h}, mode={caption_mode})...')
+                ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h, caption_mode, text_layers)
                 tmp = tempfile.NamedTemporaryFile(
                     suffix='.ass', delete=False, mode='w', encoding='utf-8'
                 )

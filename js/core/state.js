@@ -45,6 +45,13 @@ const S = {
   captionLayout: 'single',
   captionMode: 'static',  // 'static' | 'word-highlight' (karaoke) — export burn-in only, see setCaptionMode()
   safeZonesVisible: false, // platform UI safe-zone guide overlay (9:16 only) — see toggleSafeZones()
+  // Freeform text layers ("Add Text") — independent of auto-generated
+  // captions. Each: {id, text, start, end (source time), style:{fontSize,
+  // fontFamily,fontWeight,color,background,strokeEnabled,strokeThickness,
+  // strokeColor,posX,posY,posZ}} — same shape as S.textStyle but per-object,
+  // not shared. See js/ui/textlayers.js.
+  textLayers: [],
+  selectedTextLayerId: null,
   // Caption overlay styling — source of truth (bug #10). Previously these
   // lived only as inline styles on #captionOverlay: not undoable, not
   // persisted, and (still, pending the ASS burn-in pipeline) not passed to

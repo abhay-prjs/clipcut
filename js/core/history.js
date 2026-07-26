@@ -25,6 +25,8 @@ function _makeSnapshot(){
     aspect:            S.aspect,
     aspectMode:        S.aspectMode,
     textStyle:         JSON.parse(JSON.stringify(S.textStyle)),
+    textLayers:        JSON.parse(JSON.stringify(S.textLayers)),
+    selectedTextLayerId: S.selectedTextLayerId,
   };
 }
 
@@ -113,6 +115,8 @@ function _applySnapshot(snap){
   renderClipList(); updateCaptionList(); updateTrimUI();
   renderAllFindings(); sliceWaveforms(); renderTimeline();
   _applyTextStyle();
+  renderTextLayerInspector();
+  updateTextLayerOverlays(video.currentTime||0);
 }
 
 function undo(){
