@@ -167,10 +167,13 @@ ever needs multi-track compositing preview.
 - **F-B6 · Skip waveform repost** unless `zoom`, `segments`, or `waveformData`
   actually changed (cache a small signature string, compare before posting
   `draw_tl`).
-- **F-B7 · Ruler density clamp.** Even virtualized, cap sub-tick density so ticks
-  are never < 6px apart; below that draw major ticks only. (Optional: draw the
-  ruler into a canvas strip — it's non-interactive, cheapest possible win — but
-  virtualization alone is sufficient.)
+- **F-B7 · Ruler density clamp.** ✅ VERIFIED NOT NEEDED — checked `buildRuler()`'s
+  interval breakpoints (1s/2s/5s/10s sub-tick = interval/4) against the actual
+  zoom range (`zoomTL` clamps to [20,200]): minimum sub-tick spacing at zoom=20
+  is 25px, and every other breakpoint is ≥20px — always well above the 6px
+  floor this item worried about. The real cost for long clips is tick *count*
+  (duration/interval), which F-B1 virtualization fixes; a density clamp would
+  be dead code for a scenario the current zoom range can't produce.
 
 Expected result: renderTimeline cost drops from O(duration × zoom + cuts + words)
 to O(visible window), i.e. constant-time feel regardless of clip length.
