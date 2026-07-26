@@ -378,13 +378,13 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 | 8 | ● | ~~— (absent)~~ | ✅ FIXED (1fac48a, b76282e) | No project save/load — added `.ccproj` save/open (native dialogs), 30s autosave, startup recovery prompt; wired into topbar + File menu |
 | 9 | ● | ~~`js/timeline/trim.js:77`~~ | ✅ FIXED (a20bea4) | Cut-handle drag multiplied delta by 0.5 — removed the factor |
 | 10 | ● | ~~`js/captions/captions.js` (styling fns)~~ | ⚠ PARTIALLY FIXED (e2010ff) | Caption styling moved from inline-DOM-only into `S.textStyle` (now undoable, persisted, single source of truth via `_applyTextStyle()`). **Still not passed to export** — burn-in still renders plain SRT text; needs an ASS-generation pass (font/size/color/outline/position → ASS style directives, swap `subtitles=` to consume it) — bigger, separate task tied to Part F4's karaoke captions work |
-| 11 | ● | `js/media/export.js:425–450` vs `captions.js:307` | Two SRT/VTT exporters: `exportCaptions()` (correct, cut-remapped) and legacy `exportSRT()/exportVTT()` (raw timestamps). Whichever the UI wires, one produces drifted subs after cuts | Delete the legacy pair; alias names to `exportCaptions('srt'/'vtt')` |
+| 11 | ● | ~~`js/media/export.js:425–450` vs `captions.js:307`~~ | ✅ FIXED (d0f9306) | Two SRT/VTT exporters — the persistent Export footer called the legacy raw-timestamp pair; repointed at `exportCaptions()`, deleted the legacy pair |
 | 12 | ○ | ~~`js/captions/captions.js:8`~~ | ✅ FIXED (91eeb7c) | `_captionFps` was hardcoded 30 — now probed via ffprobe at import (`probe_fps()`) and synced on clip select |
 | 13 | ○ | ~~`js/timeline/timeline.js:273`~~ | ✅ FIXED (b60436f) | `handleTLClick` in a pre-snap gap resolved to *last* segment's end (assignment inside loop) instead of nearest boundary — now finds surrounding segments and snaps to the nearer edge |
 | 14 | ○ | ~~`js/timeline/trim.js:145`~~ | ✅ FIXED (48bd3e9) | Marquee select iterated `S.clips` using `clip.timelineStart` which nothing sets — dead selection logic removed, marquee box + click-suppression kept |
-| 15 | ○ | `js/timeline/trim.js:25` + `updateTrimUI` | Trim bar and its playhead map by `t/S.duration` — visually wrong after cuts/snap | Map through playSegments, or explicitly label the bar "source" |
+| 15 | ○ | ~~`js/timeline/trim.js:25` + `updateTrimUI`~~ | ✅ FIXED (34616f6) | Trim bar maps by `t/S.duration` (source time) — determined this is correct behavior (trimIn/trimOut bound the whole clip, independent of cuts), took the "explicitly label" option instead of remapping |
 | 16 | ○ | ~~`js/playback/playback.js:62`~~ | ✅ FIXED (8d3f169) | `skipTime()` could land inside removed cuts → double-jump — now clamps through playSegments |
-| 17 | ○ | `js/media/export.js:171–301` + `whisper.js:7` | Entire Flask export path (`_doFlaskExport`, SSE, `getWhisperBase`) is dead per your own architecture (Flask removed) — ~200 lines of confusion | Delete; `startExport` routes pywebview-only, error toast otherwise |
+| 17 | ○ | ~~`js/media/export.js:171–301` + `whisper.js:7`~~ | ✅ FIXED (a902c7b) | Dead Flask export path deleted (`_doFlaskExport`, SSE, `getWhisperBase`, `exportMP4FFmpeg`, `browseExportFolder`) — `startExport` routes pywebview-only, error toast otherwise |
 | 18 | ○ | ~~`js/ui/ui.js:196–197`~~ | ✅ FIXED (5f12cdc) | `toggleCutSkip` called `renderAllFindings()` twice — removed dup |
 | 19 | ○ | `CLAUDE.md` | File-structure section says `home_editor/`; files live at repo root — misleads future sessions | Update doc |
 | 20 | ● | ~~`js/timeline/trim.js:159`~~ | ✅ FIXED (801713e) | Cut-edge drag (trim bar) committed without `saveHistory()` — now snapshots at mousedown; on-timeline drag (§C6) still needs the same treatment when built |
@@ -465,10 +465,15 @@ edge-drag trimming, snap-to-word-boundary while dragging cuts.
 *Not started:* templates, drag-in-preview, ASS burn-in (needs #10's remaining
 half), frame-step keys, segment edge-drag trimming.
 
-**Phase 6 — cleanup**
-#11, #12(✅ done in Phase 4), #14(✅ done in Phase 1), #15, #16(✅ done in Phase 1), #17, #19.
-Remaining: #11 (delete legacy exportSRT/exportVTT), #15 (trim bar mapping),
-#17 (delete dead Flask export path), #19 (fix CLAUDE.md home_editor/ reference).
+**Phase 6 — cleanup** ✅ DONE — commits d0f9306..34616f6 (plus #12/#14/#16 done earlier in Phases 1/4).
+#11, #12, #14, #15, #16, #17, #19 — all 7 done.
+
+## ALL 22 BUGS ADDRESSED
+20 fully fixed, 2 partial with documented follow-ups (gap hatching in Part C
+needs a segment-model change; caption export styling needs an ASS pipeline).
+Phases 1-6 complete. Remaining scope is Phase 7 (Part F product roadmap) and
+the two explicitly-deferred larger items: the preview-proxy render (Phase 4)
+and full timeline virtualization for cuts/captions (Phase 3).
 
 **Session note — two pre-existing issues observed (not in fix notes, not fixed this pass):**
 1. Native menu unsupported in the currently installed pywebview build
