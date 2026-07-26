@@ -1,6 +1,10 @@
 // ═══════════════════════════════════════
 // TIMELINE
 // ═══════════════════════════════════════
+// Signature cache so renderTimeline() only reposts a waveform draw when
+// zoom/segment-layout/waveform-data actually changed (F-B6).
+let _lastWaveSig = null, _lastWaveformDataRef = null;
+
 function updateCutBadge(){
   const cuts=S.cuts.filter(c=>c.selected).length;
   const badge=document.getElementById('cutBadge');
@@ -185,8 +189,18 @@ function renderTimeline(){
     ct.appendChild(el);
   });
 
-  // Redraw waveform if data available
-  if(S.waveformData) drawTimelineWaveform();
+  // Redraw waveform only if something that affects its shape actually changed
+  // (zoom, segment layout, or the waveform data itself) — posting an identical
+  // draw_tl message on every render (e.g. a pure selection change) is wasted
+  // work for the worker/main-thread canvas draw.
+  if(S.waveformData){
+    const waveSig = S.zoom+'|'+S.segments.map(s=>s.timelineStart+':'+s.duration).join(',');
+    if(waveSig !== _lastWaveSig || S.waveformData !== _lastWaveformDataRef){
+      _lastWaveSig = waveSig;
+      _lastWaveformDataRef = S.waveformData;
+      drawTimelineWaveform();
+    }
+  }
 
   // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → playhead
   const ti=document.getElementById('tracksInner');
