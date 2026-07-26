@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import json
 import shutil
 import subprocess
@@ -13,15 +14,32 @@ import webview
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HTTP_PORT = 8080
 
+# Windows' default console codepage (cp1252) can't encode characters like
+# ✓/✕ used throughout log() below — an uncaught UnicodeEncodeError here has
+# previously killed background threads (e.g. the whisper auto-ping thread)
+# mid-startup. Reconfigure to UTF-8 with replacement so a stray character
+# degrades to '?' instead of crashing the thread that logged it.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 
 # ── Logger ────────────────────────────────────────────────────────────────────
 
 def log(category, msg, *extra):
     ts = time.strftime('%H:%M:%S')
     prefix = f'[{ts}] [{category}]'
-    print(f'{prefix} {msg}')
-    for line in extra:
-        print(f'{" " * len(prefix)}   {line}')
+    try:
+        print(f'{prefix} {msg}')
+        for line in extra:
+            print(f'{" " * len(prefix)}   {line}')
+    except UnicodeEncodeError:
+        # Last-resort fallback if reconfigure() itself wasn't available
+        # (older Python) — never let a log call crash its caller's thread.
+        safe_msg = msg.encode('ascii', 'replace').decode('ascii')
+        print(f'{prefix} {safe_msg}')
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -1388,32 +1406,40 @@ webview.settings['REMOTE_DEBUGGING_PORT'] = 9222
 def _js(fn): return lambda: window.evaluate_js(fn)
 
 try:
+    # pywebview 5+ moved Menu/MenuAction/MenuSeparator into the webview.menu
+    # submodule and stopped re-exporting them at the top level — webview.Menu
+    # still resolves in some builds but webview.MenuAction/MenuSeparator raise
+    # AttributeError, which previously made the whole menu setup fail and
+    # fall back to no menu at all even though this build fully supports
+    # native menus via the submodule import.
+    from webview.menu import Menu, MenuAction, MenuSeparator
+
     menu = [
-        webview.Menu('File', [
-            webview.MenuAction('Open Video',        _js('onUploadZoneClick()')),
-            webview.MenuSeparator(),
-            webview.MenuAction('Save Project',      _js('saveProject()')),
-            webview.MenuAction('Open Project',      _js('openProject()')),
-            webview.MenuSeparator(),
-            webview.MenuAction('Export',            _js('openExportModal()')),
-            webview.MenuSeparator(),
-            webview.MenuAction('Quit',              lambda: window.destroy()),
+        Menu('File', [
+            MenuAction('Open Video',        _js('onUploadZoneClick()')),
+            MenuSeparator(),
+            MenuAction('Save Project',      _js('saveProject()')),
+            MenuAction('Open Project',      _js('openProject()')),
+            MenuSeparator(),
+            MenuAction('Export',            _js('openExportModal()')),
+            MenuSeparator(),
+            MenuAction('Quit',              lambda: window.destroy()),
         ]),
-        webview.Menu('Edit', [
-            webview.MenuAction('Undo  Ctrl+Z',      _js('undo()')),
-            webview.MenuAction('Redo  Ctrl+Shift+Z',_js('redo()')),
-            webview.MenuSeparator(),
-            webview.MenuAction('Delete Selected Cut',_js('deleteSelectedCut()')),
+        Menu('Edit', [
+            MenuAction('Undo  Ctrl+Z',      _js('undo()')),
+            MenuAction('Redo  Ctrl+Shift+Z',_js('redo()')),
+            MenuSeparator(),
+            MenuAction('Delete Selected Cut',_js('deleteSelectedCut()')),
         ]),
-        webview.Menu('View', [
-            webview.MenuAction('Zoom Timeline In',  _js('zoomTL(1)')),
-            webview.MenuAction('Zoom Timeline Out', _js('zoomTL(-1)')),
-            webview.MenuAction('Zoom to Fit',       _js('zoomToFit()')),
-            webview.MenuSeparator(),
-            webview.MenuAction('Toggle DevTools',   lambda: window.evaluate_js('window.__devtools=!window.__devtools')),
+        Menu('View', [
+            MenuAction('Zoom Timeline In',  _js('zoomTL(1)')),
+            MenuAction('Zoom Timeline Out', _js('zoomTL(-1)')),
+            MenuAction('Zoom to Fit',       _js('zoomToFit()')),
+            MenuSeparator(),
+            MenuAction('Toggle DevTools',   lambda: window.evaluate_js('window.__devtools=!window.__devtools')),
         ]),
-        webview.Menu('Help', [
-            webview.MenuAction('About ClipCut',     _js("toast('ClipCut \u00b7 built by Vexxe')")),
+        Menu('Help', [
+            MenuAction('About ClipCut',     _js("toast('ClipCut \u00b7 built by Vexxe')")),
         ]),
     ]
     webview.start(menu=menu)

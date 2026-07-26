@@ -476,17 +476,17 @@ the two explicitly-deferred larger items: the preview-proxy render (Phase 4)
 and full timeline virtualization for cuts/captions (Phase 3).
 
 **Session note — two pre-existing issues observed (not in fix notes, not fixed this pass):**
-1. Native menu unsupported in the currently installed pywebview build
-   (`module 'webview' has no attribute 'MenuAction'`) — the try/except already
-   in place catches it and the app runs without a native menu, but this means
-   the File-menu Save/Open Project entries added for bug #8 won't actually
-   appear until pywebview is upgraded. The topbar 💾/📂 buttons work regardless
-   (no menu dependency).
-2. `log()` in `serve.py` crashes with `UnicodeEncodeError` on ✓/✕ characters
-   when stdout is cp1252 (default Windows console codepage) — killed the
-   whisper auto-ping background thread during a smoke-test launch. Pre-existing,
-   unrelated to any change in this pass; `log()` should open stdout with
-   `encoding='utf-8'` or strip/replace non-ASCII before printing.
+1. ✅ FIXED (later session) — `webview.MenuAction`/`webview.MenuSeparator` raised
+   `AttributeError` not because native menus are unsupported, but because
+   pywebview 5+ moved them into the `webview.menu` submodule and stopped
+   re-exporting them at top level. `serve.py` now does
+   `from webview.menu import Menu, MenuAction, MenuSeparator` — the native
+   menu (File/Edit/View/Help, including the Save/Open Project entries from
+   bug #8) actually appears now on pywebview 6.1.
+2. ✅ FIXED (later session) — `serve.py` now reconfigures `sys.stdout`/`sys.stderr`
+   to UTF-8 with `errors='replace'` at startup, and `log()` has an ASCII-fallback
+   `except UnicodeEncodeError` as a last resort — a stray ✓/✕ under cp1252 no
+   longer crashes the thread that logged it.
 
 ---
 
