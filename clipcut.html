@@ -606,7 +606,7 @@
 <div id="trimBar" style="display:flex;align-items:center;gap:8px;padding:4px 12px;background:var(--s1);border-top:1px solid var(--b1);border-bottom:1px solid var(--b1);flex-shrink:0">
   <!-- Context label -->
   <div id="trimContext" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-    <span id="trimContextLabel" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2)">● Clip trim</span>
+    <span id="trimContextLabel" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2)">● Clip trim (source time)</span>
     <span id="trimContextDur"   style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--accent)"></span>
   </div>
   <div style="width:1px;height:14px;background:var(--b2);flex-shrink:0"></div>
@@ -614,7 +614,7 @@
   <span style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);flex-shrink:0">In: <span id="trimInLbl" style="color:var(--blue-soft)">0.0s</span></span>
   <!-- Trim slider -->
   <div style="flex:1;display:flex;justify-content:center">
-  <div class="trim-slider-track" id="trimTrack" style="width:420px;min-width:80px;max-width:420px">
+  <div class="trim-slider-track" id="trimTrack" style="width:420px;min-width:80px;max-width:420px" title="Trims the whole source clip — positions are source time, not the post-cut timeline below">
     <div class="trim-fill"    id="trimFill"></div>
     <div class="trim-h"       id="trimHL" style="left:0"></div>
     <div class="trim-h"       id="trimHR" style="right:0;left:auto"></div>

@@ -582,7 +582,11 @@ function updateTrimContext(){
     label.style.color='var(--blue-soft)';
     dur.textContent=(S.segments[idx]?.duration||0).toFixed(2)+'s';
   } else {
-    label.textContent='● Clip trim';
+    // Clip-level trimIn/trimOut are always source-file time (the outer bounds
+    // of the whole clip) — deliberately NOT remapped through playSegments,
+    // which would break their actual purpose. Labeled explicitly (bug #15)
+    // so this doesn't read as a bug when it doesn't match the post-cut timeline.
+    label.textContent='● Clip trim (source time)';
     label.style.color='var(--text2)';
     dur.textContent='';
   }

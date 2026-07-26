@@ -1,6 +1,14 @@
 // ═══════════════════════════════════════
 // TRIM
 // ═══════════════════════════════════════
+// NOTE (bug #15): the clip-trim branch below (and updateTrimPlayhead()) maps
+// by raw t/S.duration — i.e. source-file time, NOT the post-cut/snapped
+// timeline. This is intentional: trimIn/trimOut are the outer bounds of the
+// whole source clip, a concept that exists independently of internal cuts,
+// so mapping them through playSegments would change what they mean rather
+// than fix a bug. Labeled "(source time)" in updateTrimContext() so this
+// doesn't read as a positioning bug when it visually diverges from the
+// timeline below it.
 function updateTrimUI(){
   if(S.selectedCutId!==null){
     const cut=S.cuts.find(c=>c.id===S.selectedCutId);
