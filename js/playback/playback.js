@@ -335,6 +335,22 @@ function getPlayheadPosition(){
   return video.currentTime * S.zoom;
 }
 
+// Returns S.segments-shaped {sourceStart,sourceEnd,timelineStart} laid out
+// with a contiguous (gapless) cursor — independent of the live S.snapped
+// display state. Export always produces a gapless concatenation of kept
+// segments (ffmpeg concat, no gaps), so anything computing caption-sync
+// timestamps for export/burn-in must use this instead of trusting
+// S.segments[].timelineStart directly, which now holds real gaps pre-snap
+// (see _relayoutSegments() in trim.js / the gap-hatching timeline render).
+function gaplessSegmentMeta(){
+  let cursor=0;
+  return S.segments.map(s=>{
+    const m={sourceStart:s.sourceStart, sourceEnd:s.sourceEnd, timelineStart:cursor};
+    cursor+=(s.sourceEnd-s.sourceStart);
+    return m;
+  });
+}
+
 // Maps a source-file timestamp to its position on the (potentially cut) timeline.
 // Returns null if the time falls inside a removed region.
 function sourceTimeToTimeline(t){

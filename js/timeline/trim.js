@@ -222,14 +222,7 @@ function splitAtPlayhead(){
 
   // Replace the original segment with the two halves
   S.segments.splice(segIdx,1,segA,segB);
-
-  // Recalculate timelineStart for every segment after the split
-  let cursor=segA.timelineStart+segA.duration;
-  for(let i=segIdx+1;i<S.segments.length;i++){
-    S.segments[i].timelineStart=cursor;
-    S.segments[i].waveformSlice=null;
-    cursor+=S.segments[i].duration;
-  }
+  _relayoutSegments();
 
   buildPlaySegments();
   sliceWaveforms();
@@ -260,35 +253,51 @@ function trimAfter(){
   toast(`▷ Trimmed after ${t.toFixed(2)}s`);
 }
 
+// Shared timeline layout for S.segments — the single place that decides where
+// each segment sits on the timeline, so every segment-mutating function
+// (applyCuts, splitAtPlayhead, deleteSegment, _applyTrimToSegments here,
+// snapGaps) agrees on the same rule instead of each hand-rolling its own
+// cursor math:
+//   S.snapped === true  → contiguous layout, gaps closed (cursor-based)
+//   S.snapped === false → each segment sits at its own sourceStart, so a
+//                         removed cut leaves a real gap in timelineStart —
+//                         renderTimeline() draws that gap as a hatched
+//                         .tl-gap block instead of silently closing it
+function _relayoutSegments(){
+  if(S.snapped){
+    let cursor=0;
+    S.segments.forEach(seg=>{ seg.timelineStart=cursor; cursor+=seg.duration; });
+  } else {
+    S.segments.forEach(seg=>{ seg.timelineStart=seg.sourceStart; });
+  }
+}
+
 // Shared: clamp S.segments to [tIn, tOut] and rebuild timelineStart offsets.
 function _applyTrimToSegments(tIn, tOut){
   const trimmed = [];
-  let cursor = 0;
   for(const seg of S.segments){
     if(seg.sourceEnd <= tIn || seg.sourceStart >= tOut) continue;
     const sStart = Math.max(seg.sourceStart, tIn);
     const sEnd   = Math.min(seg.sourceEnd,   tOut);
     const dur    = sEnd - sStart;
-    trimmed.push({...seg, sourceStart:sStart, sourceEnd:sEnd, duration:dur, timelineStart:cursor, waveformSlice:null});
-    cursor += dur;
+    trimmed.push({...seg, sourceStart:sStart, sourceEnd:sEnd, duration:dur, timelineStart:0, waveformSlice:null});
   }
   if(!trimmed.length){
     trimmed.push({id:crypto.randomUUID(), sourceStart:tIn, sourceEnd:tOut, duration:tOut-tIn, timelineStart:0, waveformSlice:null});
   }
   S.segments = trimmed;
+  _relayoutSegments();
 }
 
 // Removes the selected segment (the "split → delete bad half" flow —
 // Split existed via Ctrl+B but there was no way to then discard the split-off
-// piece). Recomputes timelineStart for the remaining segments so they stay
-// contiguous.
+// piece). Recomputes timelineStart for the remaining segments via _relayoutSegments().
 function deleteSegment(){
   if(S.selectedSegmentId===null) return;
   if(S.segments.length<=1){ toast("Can't delete the only segment"); return; }
   saveHistory();
   S.segments = S.segments.filter(s=>s.id!==S.selectedSegmentId);
-  let cursor=0;
-  S.segments.forEach(seg=>{ seg.timelineStart=cursor; cursor+=seg.duration; });
+  _relayoutSegments();
   S.selectedSegmentId=null;
   buildPlaySegments();
   sliceWaveforms();

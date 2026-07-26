@@ -447,16 +447,15 @@ function applyCuts(){
     }
   });
 
-  // Sort by sourceStart, then recalculate timelineStart sequentially
+  // Sort by sourceStart; timelineStart is assigned by _relayoutSegments()
+  // below (sourceStart-based since S.snapped=false — leaves a real gap where
+  // each applied cut was, which renderTimeline() draws as a hatched block
+  // until snapGaps() closes it)
   newSegments.sort((a,b)=>a.sourceStart-b.sourceStart);
-  let tCursor=0;
-  newSegments.forEach(seg=>{
-    seg.timelineStart=tCursor;
-    tCursor+=seg.duration;
-  });
 
   S.segments=newSegments;
   S.snapped=false;
+  _relayoutSegments();
   // remove applied cuts from S.cuts
   S.cuts=S.cuts.filter(c=>!c.selected);
   updateCaptionList();

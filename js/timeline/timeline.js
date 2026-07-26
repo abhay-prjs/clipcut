@@ -16,16 +16,14 @@ function updateCutBadge(){
 function renderTimeline(){
   const zoom=S.zoom;
 
-  // Total timeline duration — derived from segments when available
+  // Total timeline duration — derived from segments when available.
+  // _relayoutSegments() keeps timelineStart consistent with S.snapped (gapless
+  // cursor layout when snapped, sourceStart-based with real gaps when not),
+  // so the rightmost extent is always the same formula either way.
   let totalDur;
   if(S.segments.length){
-    if(S.snapped){
-      const last=S.segments[S.segments.length-1];
-      totalDur=last.timelineStart+last.duration;
-    } else {
-      // Before snap: use sum of segment durations (= source content after applied cuts)
-      totalDur=S.segments.reduce((sum,seg)=>sum+seg.duration,0);
-    }
+    const last=S.segments[S.segments.length-1];
+    totalDur=last.timelineStart+last.duration;
   } else {
     totalDur=Math.max(...S.clips.map(c=>c.duration),30);
   }
@@ -33,9 +31,26 @@ function renderTimeline(){
   document.getElementById('tracksInner').style.width=totalW+'px';
   buildRuler(totalDur,totalW,zoom);
 
-  // ── VIDEO TRACK: one element per segment ───────────────────
+  // ── VIDEO TRACK: one element per segment, gap-hatch bars in between ──
   const vt=document.getElementById('videoTrack'); vt.innerHTML='';
   const vtFrag=document.createDocumentFragment();
+  // Pre-snap, a removed cut leaves timelineStart gaps between segments
+  // (see _relayoutSegments) — draw those gaps as visibly hatched rather than
+  // silent empty space, so "this was cut" reads instantly without needing to
+  // select anything. Gone once snapGaps() runs (S.snapped=true, no gaps left).
+  if(!S.snapped){
+    for(let i=0;i<S.segments.length-1;i++){
+      const cur=S.segments[i], next=S.segments[i+1];
+      const gapStart=cur.timelineStart+cur.duration, gapEnd=next.timelineStart;
+      if(gapEnd-gapStart<=0.01) continue;
+      const gapEl=document.createElement('div');
+      gapEl.className='tl-gap';
+      gapEl.style.left=(gapStart*zoom)+'px';
+      gapEl.style.width=Math.max((gapEnd-gapStart)*zoom,2)+'px';
+      gapEl.title=`Cut — ${(gapEnd-gapStart).toFixed(2)}s removed`;
+      vtFrag.appendChild(gapEl);
+    }
+  }
   S.segments.forEach((seg,i)=>{
     const left=seg.timelineStart*zoom;
     const width=Math.max(seg.duration*zoom,20);
@@ -360,12 +375,8 @@ function snapPlayhead(){if(!video.src)return;const x=getPlayheadPosition();tArea
 function snapGaps(){
   if(!S.segments.length){toast('No segments');return;}
   saveHistory();
-  let cursor=0;
-  S.segments.forEach(seg=>{
-    seg.timelineStart=cursor;
-    cursor+=seg.duration;
-  });
   S.snapped=true;
+  _relayoutSegments();
   renderTimeline();
   // Sync to pywebview shared state
   if(window.pywebview?.state) window.pywebview.state.segments = S.segments;

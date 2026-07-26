@@ -94,9 +94,11 @@ async function _doPywebviewExport(){
   const segs = S.segments.length
     ? S.segments.map(s=>({start:s.sourceStart, end:s.sourceEnd}))
     : [{start:S.trimIn||0, end:S.trimOut||S.duration}];
-  const segMeta = S.segments.length
-    ? S.segments.map(s=>({sourceStart:s.sourceStart, sourceEnd:s.sourceEnd, timelineStart:s.timelineStart}))
-    : [];
+  // gaplessSegmentMeta(), not S.segments directly — the exported video is
+  // always a gapless concat of kept segments, but S.segments[].timelineStart
+  // may currently hold real pre-snap gaps (gap-hatching), which would
+  // desync burned-in caption timing from the actual export.
+  const segMeta = S.segments.length ? gaplessSegmentMeta() : [];
 
   _setExportUI('running');
   _setExportLabel('Opening save dialog…');

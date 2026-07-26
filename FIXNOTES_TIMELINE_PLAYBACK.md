@@ -411,11 +411,17 @@ mapping fixes and the 1-element cut blocks, and includes bug #20.
 teal colors, and §C6 on-timeline drag (edges + move + snap-to-word/cut/segment/
 playhead/whole-second, Alt=no-snap, Shift=fine-drag).
 *Deferred (flagged, not silently dropped):*
-- **Gap hatching** — needs a real gap in segment `timelineStart` layout pre-snap;
-  `applyCuts()`/`snapGaps()` currently always lay segments out contiguously, so
-  there's nothing to hatch today. Would require changing segment/timeline
-  semantics (touches `applyCuts`, `snapGaps`, `sourceTimeToTimeline`,
-  `buildPlaySegments`) — bigger than a rendering change, do as its own task.
+- **Gap hatching** — ✅ IMPLEMENTED (later session). Added a shared
+  `_relayoutSegments()` (`js/timeline/trim.js`) that every segment-mutating
+  function now calls instead of hand-rolling cursor math: contiguous when
+  `S.snapped`, `timelineStart = sourceStart` (real gaps) when not. Gaps render
+  as a `.tl-gap` 45°-hatched block. Surfaced a real bug while wiring it up:
+  `exportCaptions()` and `_doPywebviewExport()`'s `segMeta` both read
+  `S.segments[].timelineStart` directly for caption-sync timestamps, which
+  would have desynced burned-in/exported caption timing from the actual
+  (always-gapless) exported video the moment a gap existed pre-snap. Fixed
+  with a new `gaplessSegmentMeta()` helper (`js/playback/playback.js`) that
+  both call sites now use instead.
 - **§C6 full clamping** — drag currently only enforces the 0.05s min-gap between
   a cut's own start/end; clamping to the containing segment's bounds and to
   neighbouring same-lane cuts isn't implemented (snapping covers the common

@@ -337,11 +337,32 @@ Every detected issue uses this shape — do NOT deviate:
   id: crypto.randomUUID(),
   sourceStart: 0.0,     // position in original file
   sourceEnd: 0.0,
-  timelineStart: 0.0,   // position on timeline (recalc after snap)
+  timelineStart: 0.0,   // position on timeline — see _relayoutSegments() below
   duration: 0.0,        // sourceEnd - sourceStart
   waveformSlice: null   // assigned by sliceWaveforms()
 }
 ```
+
+**`timelineStart` layout rule — `_relayoutSegments()` (`js/timeline/trim.js`):**
+the single place that decides where each segment sits on the timeline.
+- `S.snapped === true` → contiguous cursor layout, no gaps (matches the
+  exported video, which is always a gapless concat of kept segments)
+- `S.snapped === false` → each segment's `timelineStart = sourceStart`, so a
+  removed cut leaves a real gap — `renderTimeline()` draws it as a hatched
+  `.tl-gap` block (gap hatching)
+
+Every segment-mutating function (`applyCuts()`, `snapGaps()`,
+`splitAtPlayhead()`, `deleteSegment()`, `_applyTrimToSegments()`) calls
+`_relayoutSegments()` after mutating `S.segments` instead of hand-rolling its
+own cursor math — do not reintroduce a local cursor loop in a new one.
+
+**`gaplessSegmentMeta()` (`js/playback/playback.js`)** — returns
+`S.segments`-shaped data with a contiguous cursor layout regardless of the
+live `S.snapped` state. Anything computing caption-sync timestamps for
+export/burn-in (`exportCaptions()` in captions.js, `_doPywebviewExport()`'s
+`segMeta` in export.js) **must** use this, never `S.segments[].timelineStart`
+directly — the exported video has no gaps even when the on-screen timeline
+is currently showing gap-hatched cuts pre-snap.
 
 ## Key Functions — by file
 **js/core/state.js** — S object, _clipRegistry, video/ph/tArea

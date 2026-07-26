@@ -272,7 +272,13 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .track-row{height:36px;position:relative;border-bottom:1px solid var(--b1);background:rgba(255,255,255,.02);contain:layout paint;}
 .waveform-row{height:50px;position:relative;border-bottom:1px solid var(--b1);background:rgba(10,132,255,.03);contain:layout paint;}
 
-.tl-clip{position:absolute;top:3px;bottom:3px;background:var(--tl-seg-fill);border:1px solid var(--tl-seg-border);border-radius:6px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:var(--tl-seg-text);white-space:nowrap;}
+/* Removed-cut gap, pre-snap only (S.snapped===false) — reads as "cut" at a
+   glance instead of silent empty track space. z-index 1: above the track
+   background (0), below segments (2, which never spatially overlap it). */
+.tl-gap{position:absolute;top:3px;bottom:3px;z-index:1;border-radius:4px;pointer-events:none;
+  background:repeating-linear-gradient(45deg, var(--tl-gap), var(--tl-gap) 6px, #1a1a1e 6px, #1a1a1e 12px);}
+
+.tl-clip{position:absolute;top:3px;bottom:3px;z-index:2;background:var(--tl-seg-fill);border:1px solid var(--tl-seg-border);border-radius:6px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:var(--tl-seg-text);white-space:nowrap;}
 .tl-clip:hover{border-color:var(--blue-soft);}
 .tl-clip.caption{background:var(--tl-cap-fill);border-color:var(--tl-cap-border);color:var(--tl-cap-text);font-size:8.5px;}
 .tl-clip.selected,.seg-selected{border-color:#fff !important;box-shadow:0 0 0 1px rgba(255,255,255,.5) inset;}

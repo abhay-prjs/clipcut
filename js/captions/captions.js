@@ -361,10 +361,13 @@ function seekTo(t){if(!video.src)return;video.currentTime=t;}
 function exportCaptions(fmt) {
   if(!S.captions.length){ toast('No captions to export'); return; }
 
-  // Map a source timestamp to the post-cut timeline position.
+  // Map a source timestamp to the post-cut timeline position. Always gapless
+  // (gaplessSegmentMeta) — exported captions must match the exported video,
+  // which is a gapless concatenation of kept segments regardless of whether
+  // the on-screen timeline is currently showing gap-hatched cuts pre-snap.
   // Returns null if the timestamp falls inside a removed cut region.
   const segs = S.segments.length
-    ? S.segments
+    ? gaplessSegmentMeta()
     : [{sourceStart:0, sourceEnd:S.duration, timelineStart:0}];
 
   function srcToTl(t) {
