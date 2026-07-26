@@ -427,29 +427,3 @@ function exportFrame(){
   toast('📸 Frame exported!');
 }
 
-function exportSRT(){
-  if(!S.captions.length){toast('No captions');return;}
-  const fmt=t=>{
-    const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),
-          s=Math.floor(t%60),ms=Math.round((t%1)*1000);
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`;
-  };
-  const lines=S.captions.map((c,i)=>`${i+1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`);
-  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='captions.srt'; a.click();
-  toast('✓ SRT exported');
-}
-
-function exportVTT(){
-  if(!S.captions.length){toast('No captions');return;}
-  const fmt=t=>{
-    const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),
-          s=Math.floor(t%60),ms=Math.round((t%1)*1000);
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
-  };
-  const lines=['WEBVTT',''];
-  S.captions.forEach(c=>lines.push(`${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`));
-  const blob=new Blob([lines.join('\n')],{type:'text/vtt'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='captions.vtt'; a.click();
-  toast('✓ VTT exported');
-}
