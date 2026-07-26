@@ -165,6 +165,14 @@
         </div>
         <div id="silenceFindings"><div class="empty-state">Run detection first</div></div>
       </div>
+      <div class="panel-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div class="panel-label" style="margin:0">Edit Check</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2)" id="lintStats"></div>
+        </div>
+        <button class="act-btn" style="margin-bottom:6px" onclick="runEditLint()">🔍 Check Edit</button>
+        <div id="lintFindings"><div class="empty-state">Run a check before applying cuts</div></div>
+      </div>
       <div style="padding:0 10px 10px">
         <button class="act-btn primary" onclick="applyCuts()">✓ Apply Selected Cuts</button>
       </div>
@@ -824,6 +832,7 @@
 <script src="js/captions/whisper.js"></script>
 <script src="js/detection/waveform.js"></script>
 <script src="js/detection/silence.js"></script>
+<script src="js/detection/linter.js"></script>
 <script src="js/detection/ai.js"></script>
 <script src="js/media/import.js"></script>
 <script src="js/media/export.js"></script>

@@ -76,6 +76,7 @@ docs/backups predating the 2026-07-26 rename may still say otherwise).
     ├── detection/
     │   ├── waveform.js     # extractAudioData(), drawWaveformModal(), drawTimelineWaveform(), sliceWaveforms(), _initWaveWorker IIFE
     │   ├── silence.js      # detectDeadSpaces(), detectFillers(), renderAllFindings(), applyCuts(), selectCut(), seekToCut()
+    │   ├── linter.js       # runEditLint() — Tier-1 deterministic pre-apply checks (Part F2), renderLintFindings()
     │   └── ai.js           # AI chat, script analysis, model selector, token guard, provider switcher
     ├── media/
     │   ├── import.js       # loadClip(), selectClip(), loadClipFromPath(), openFileNative()
@@ -99,6 +100,7 @@ js/captions/captions.js
 js/captions/whisper.js
 js/detection/waveform.js
 js/detection/silence.js
+js/detection/linter.js
 js/detection/ai.js
 js/media/import.js
 js/media/export.js
@@ -390,6 +392,11 @@ Every detected issue uses this shape — do NOT deviate:
 - `toggleCutSelected(cutId)` — toggles cut.selected, rebuilds play segments
 - `runAutoMode(deep)` — chains steps controlled by S.settings flags (see Auto Mode section below)
 
+**js/detection/linter.js** — Tier-1 deterministic edit linter (Part F2)
+- `runEditLint()` — checks currently *selected* (pending, not-yet-applied) cuts against 6 rules: mid-word cut, audio-pop risk, orphan sliver, machine-gun pacing, sentence amputation, unflagged dead start/end. Deliberately pre-apply, not post-apply — once `applyCuts()` runs, cuts no longer exist as S.cuts objects to fix/merge, only committed S.segments. Populates `S_lintFindings`, called from the "🔍 Check Edit" button in the Silence tab (right before "Apply Selected Cuts")
+- Each finding has an optional `fix` closure — mid-word/audio-pop snap the cut edge (word boundary or nearest RMS valley within ±0.15s), orphan-sliver/pacing call the existing `mergeCuts()`, dead-start/end push a new `dead_air` cut. Sentence amputation is flag-only (content judgment, no safe auto-fix). Every fix calls `saveHistory()` first and re-runs `runEditLint()` to refresh the list
+- `renderLintFindings()` — reuses the `.sil-result-item` card style from `_buildCutCard()`
+
 **js/detection/ai.js**
 - `runAIScriptAnalysis()` — sends transcript to OpenRouter/Ollama, populates S.cuts
 - `runAIAnalysis()` — audio analysis + OpenRouter silence review
@@ -532,7 +539,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 ## Tab Structure — Left Panel (icon rail)
 **Media tab:** slim import button, Auto/Deep buttons, clip library grid (2-col thumbnails)
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
-**Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only)
+**Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only), Edit Check (🔍 Check Edit → `runEditLint()`, see `js/detection/linter.js`) directly above Apply Selected Cuts
 **AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
 **Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · Reset to Defaults
 

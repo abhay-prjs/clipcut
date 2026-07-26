@@ -531,20 +531,24 @@ Research note: most "something feels off" moments after auto-cutting are
 **mechanically detectable** — you don't need an LLM for the first tier, and the
 data (word timestamps, RMS frames) is already in memory.
 
-**Tier 1 — deterministic edit linter (free, instant, runs after every apply):**
+**Tier 1 — deterministic edit linter — ✅ IMPLEMENTED (`js/detection/linter.js`,
+"🔍 Check Edit" button in the Silence tab). Built pre-apply against currently
+*selected* cuts rather than post-apply against committed segments — once
+`applyCuts()` runs, cuts no longer exist as objects to snap/merge, so
+reviewing right before Apply is both simpler and more actionable:**
 
 | Check | Signal | Auto-fix offer |
 |---|---|---|
 | Mid-word cut | cut edge falls inside `[word.start, word.end]` of any caption | snap edge to nearest word boundary |
 | Audio-pop risk | cut edge lands on RMS frame above threshold (waveform frames exist at 0.05s resolution) | snap edge to nearest RMS valley within ±0.15s — this is what pro auto-editors do to avoid clicks |
-| Orphan sliver | kept segment < 0.5s between two cuts | merge into neighbouring cut |
-| Machine-gun pacing | > N boundaries per 10s window | suggest merging nearby cuts (mergeCuts exists) |
-| Sentence amputation | cut removes > 60% of a sentence (punct-grouping helper exists) | flag for review |
-| Dead start/end | first/last kept segment begins/ends in silence | trim suggestion |
+| Orphan sliver | kept gap < 0.5s between two selected cuts | merge via existing `mergeCuts()` |
+| Machine-gun pacing | > 6 selected-cut starts per 10s window | merge via existing `mergeCuts()` with a looser threshold |
+| Sentence amputation | cut removes > 60% of a sentence (local lightweight punct-grouping in linter.js) | flag for review only — no safe auto-fix for a content judgment call |
+| Dead start/end | leading/trailing silence not covered by any selected cut | adds a new `dead_air` cut spanning it |
 
-Render results as a review list (reuse the findings-card UI); each row = jump +
-one-click fix. This alone will catch most of what CapCut's "smart edit" quietly
-does for you.
+Renders as a review list reusing the `.sil-result-item` findings-card style;
+each row = jump (click) + optional one-click Fix button. Not yet done:
+Tier 2 (LLM cross-verification) — tracked separately.
 
 **Tier 2 — LLM cross-verification (uses existing OpenRouter/Ollama + ACTION
 plumbing):** send the *planned edit* — segment durations, cut list with
