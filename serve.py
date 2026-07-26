@@ -277,6 +277,60 @@ def _aspect_filter(aspect, mode):
     h = f"trunc(min(ih,iw*{th}/{tw})/2)*2"
     return f"crop='{w}':'{h}'"
 
+# UI-friendly names -> ffmpeg xfade's actual transition names.
+XFADE_TYPES = {
+    'crossfade': 'fade',
+    'wipeleft':  'wipeleft',
+    'wiperight': 'wiperight',
+    'zoom':      'zoomin',
+    'glitch':    'pixelize',   # xfade has no literal "glitch" transition — pixelize is the closest stand-in
+    'dissolve':  'dissolve',
+}
+
+def _make_xfade_filter_complex(segments, transition_type, transition_dur):
+    """Chains segments with ffmpeg's xfade/acrossfade instead of a hard-cut
+    concat — each junction crossfades for transition_dur seconds, which
+    shrinks the total output duration by transition_dur per junction (the
+    two adjacent clips overlap during the fade rather than playing back to
+    back). Clamped per-junction to the shorter of the two adjacent segments'
+    own durations (not compounding across a long chain — a segment shorter
+    than the transition on both sides would need a fancier scheme, edge
+    case for pathologically short segments not handled in v1).
+
+    Scope note: transitions are NOT combined with caption/text-layer/image-
+    overlay burn-in in this pass — the seg_meta timeline mapping those use
+    assumes a plain gapless concat with no crossfade shrinkage, so mixing
+    both would desync their timing. _export_with_transitions() (below)
+    intentionally has no ASS/overlay support; pick one or the other for now.
+    """
+    xfade_name = XFADE_TYPES.get(transition_type, 'fade')
+    parts = []
+    n = len(segments)
+    durations = [round(seg['end'] - seg['start'], 3) for seg in segments]
+    for i, seg in enumerate(segments):
+        s, e = round(seg['start'], 3), round(seg['end'], 3)
+        parts.append(f"[0:v]trim=start={s}:end={e},setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[0:a]atrim=start={s}:end={e},asetpts=PTS-STARTPTS[a{i}]")
+
+    if n == 1:
+        parts.append("[v0]null[outv]")
+        parts.append("[a0]anull[outa]")
+        return ";".join(parts), "[outv]", "[outa]", durations[0]
+
+    cur_v, cur_a = "v0", "a0"
+    cum_dur = durations[0]
+    for i in range(1, n):
+        t = max(0.05, min(transition_dur, durations[i - 1], durations[i]))
+        offset = round(max(0, cum_dur - t), 3)
+        is_last = (i == n - 1)
+        nv = "outv" if is_last else f"xv{i}"
+        na = "outa" if is_last else f"xa{i}"
+        parts.append(f"[{cur_v}][v{i}]xfade=transition={xfade_name}:duration={t}:offset={offset}[{nv}]")
+        parts.append(f"[{cur_a}][a{i}]acrossfade=d={t}[{na}]")
+        cur_v, cur_a = nv, na
+        cum_dur = round(cum_dur + durations[i] - t, 3)
+    return ";".join(parts), "[outv]", "[outa]", cum_dur
+
 def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter='',
                          image_layers=None, seg_meta=None, out_w=0, out_h=0):
     """image_layers: [{path,start,end,posX,posY,posZ}] (source time) — each
@@ -1239,7 +1293,8 @@ class API:
                      burn_captions=False, captions_json='[]', seg_meta_json='[]',
                      aspect='', aspect_mode='crop',
                      text_style_json='{}', preview_height_px=0,
-                     caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
+                     caption_mode='static', text_layers_json='[]', image_layers_json='[]',
+                     transition_type='none', transition_duration=0.5):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -1268,7 +1323,8 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode, text_layers_json, image_layers_json
+                caption_mode, text_layers_json, image_layers_json,
+                transition_type, transition_duration
             )
         except Exception as exc:
             import traceback
@@ -1281,7 +1337,8 @@ class API:
                             burn_captions, captions_json, seg_meta_json,
                             aspect='', aspect_mode='crop',
                             text_style_json='{}', preview_height_px=0,
-                            caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
+                            caption_mode='static', text_layers_json='[]', image_layers_json='[]',
+                     transition_type='none', transition_duration=0.5):
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
@@ -1302,7 +1359,8 @@ class API:
             burn_captions, captions_json, seg_meta_json,
             aspect, aspect_mode,
             text_style_json, preview_height_px,
-            caption_mode, text_layers_json, image_layers_json
+            caption_mode, text_layers_json, image_layers_json,
+                transition_type, transition_duration
         )
 
     def export_video_batch_one(self, source_path, segments_json, save_path,
@@ -1310,7 +1368,8 @@ class API:
                                burn_captions=False, captions_json='[]', seg_meta_json='[]',
                                aspect='', aspect_mode='crop',
                                text_style_json='{}', preview_height_px=0,
-                               caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
+                               caption_mode='static', text_layers_json='[]', image_layers_json='[]',
+                     transition_type='none', transition_duration=0.5):
         """Same encode core as export_video(), but takes save_path directly
         instead of opening a native Save dialog — batch export (js/media/batch.js)
         picks one destination folder up front via pick_folder() and computes
@@ -1324,7 +1383,8 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode, text_layers_json, image_layers_json
+                caption_mode, text_layers_json, image_layers_json,
+                transition_type, transition_duration
             )
         except Exception as exc:
             import traceback
@@ -1337,7 +1397,8 @@ class API:
                            burn_captions, captions_json, seg_meta_json,
                            aspect='', aspect_mode='crop',
                            text_style_json='{}', preview_height_px=0,
-                           caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
+                           caption_mode='static', text_layers_json='[]', image_layers_json='[]',
+                     transition_type='none', transition_duration=0.5):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1363,6 +1424,17 @@ class API:
             (f'  tune: {p["tune"]}' if p.get("tune") else '') +
             (f'  flip: {flip_filter}' if flip_filter else '') +
             (f'  aspect_filter: {aspect_filter}' if aspect_filter else ''))
+
+        use_transitions = transition_type and transition_type != 'none' and len(segments) > 1
+        if use_transitions:
+            if burn_captions:
+                log('EXPORT', '⚠ Transitions + burn-in captions/text/image are not combined yet — '
+                               'using transitions, captions/text/image overlays skipped for this export')
+            log('EXPORT', f'Mode: xfade transitions ({transition_type}, {transition_duration}s)')
+            return self._export_with_transitions(
+                source_path, segments, save_path, p, flip_filter,
+                aspect_filter, transition_type, transition_duration
+            )
 
         if burn_captions:
             log('EXPORT', 'Mode: filter_complex + styled ASS burn-in (single-pass)')
@@ -1660,6 +1732,50 @@ class API:
             log('EXPORT', f'✓ Burnin export done  →  {save_path}  ({size_mb:.1f} MB)')
             return {'success': True, 'path': save_path}
         log('EXPORT', f'✕ Burnin export failed')
+        return {'success': False, 'error': err}
+
+    def _export_with_transitions(self, source_path, segments, save_path, p, flip_filter,
+                                 aspect_filter, transition_type, transition_dur):
+        """xfade/acrossfade chain between kept segments instead of a hard-cut
+        concat. No ASS/caption/text-layer/image-overlay support in this path —
+        see _make_xfade_filter_complex()'s docstring for why they don't mix
+        with transitions yet; that's a documented v1 scope cut, not an
+        oversight."""
+        fc, out_v, out_a, total_dur = _make_xfade_filter_complex(segments, transition_type, transition_dur)
+        total_us = int(total_dur * 1_000_000)
+
+        parts_extra = []
+        final_v = out_v
+        if aspect_filter:
+            parts_extra.append(f"{final_v}{aspect_filter}[av]")
+            final_v = "[av]"
+        if flip_filter:
+            parts_extra.append(f"{final_v}{flip_filter}[fv]")
+            final_v = "[fv]"
+        full_fc = fc + (";" + ";".join(parts_extra) if parts_extra else "")
+
+        prog_flags = ['-progress', 'pipe:1', '-nostats', '-threads', '0']
+        base = ['ffmpeg', '-y', '-i', source_path] + prog_flags
+
+        cmd_gpu = (base + ['-filter_complex', full_fc, '-map', final_v, '-map', out_a]
+                   + _nvenc_args(p) + ['-c:a', 'aac', save_path])
+        cmd_cpu = (base + ['-filter_complex', full_fc, '-map', final_v, '-map', out_a]
+                   + _x264_args(p) + ['-c:a', 'aac', save_path])
+
+        log('EXPORT', f'Running GPU encode (transitions: {transition_type}, {transition_dur}s)...')
+        ok, err = self._run_ffmpeg(cmd_gpu, total_us, 0, 100)
+        if not ok and not self._export_cancelled:
+            log('EXPORT', '✕ GPU transition encode failed — retrying CPU')
+            ok, err = self._run_ffmpeg(cmd_cpu, total_us, 0, 100)
+
+        if self._export_cancelled:
+            log('EXPORT', 'Cancelled by user')
+            return {'success': False, 'error': 'cancelled'}
+        if ok:
+            size_mb = os.path.getsize(save_path) / 1_048_576 if os.path.exists(save_path) else 0
+            log('EXPORT', f'✓ Transition export done  →  {save_path}  ({size_mb:.1f} MB)')
+            return {'success': True, 'path': save_path}
+        log('EXPORT', '✕ Transition export failed')
         return {'success': False, 'error': err}
 
     # ── Preview proxy (Part A3 Option 3) ────────────────────────────────────

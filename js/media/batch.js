@@ -137,7 +137,9 @@ async function runBatchExport(){
         burnCap ? (video.clientHeight||0) : 0,
         S.captionMode,
         burnCap ? JSON.stringify(S.textLayers) : '[]',
-        burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]'
+        burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
+        typeof _exportTransitionType !== 'undefined' ? _exportTransitionType : 'none',
+        typeof _exportTransitionDur !== 'undefined' ? _exportTransitionDur : 0.5
       );
 
       if(!result?.success){

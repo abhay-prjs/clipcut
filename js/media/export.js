@@ -4,6 +4,8 @@
 let _exportFormat  = 'mp4';
 let _exportPreset  = 'fast';
 let _exportBurnCap = false;
+let _exportTransitionType = 'none';
+let _exportTransitionDur  = 0.5;
 
 const _PRESET_HINTS = {
   fast:     'nvenc p2 · cq 28 — fastest encode, larger file',
@@ -32,6 +34,24 @@ function toggleBurnCaptions(){
   btn.textContent=_exportBurnCap?'ON':'OFF';
   btn.classList.toggle('primary',_exportBurnCap);
   if(_exportBurnCap && !S.captions.length) toast('⚠ No captions — transcribe first');
+}
+
+// Cut transitions (crossfade/wipe/zoom/glitch/dissolve) — xfade/acrossfade
+// chain between kept segments (_make_xfade_filter_complex in serve.py),
+// mutually exclusive with burn-in captions/text/image overlays this pass —
+// see that function's docstring for why.
+function setExportTransition(type){
+  _exportTransitionType = type;
+  const durRow = document.getElementById('exportTransitionDurRow');
+  const warning = document.getElementById('exportTransitionWarning');
+  const show = type !== 'none';
+  if(durRow) durRow.style.display = show ? 'flex' : 'none';
+  if(warning) warning.style.display = show ? '' : 'none';
+}
+function syncExportTransitionDur(v){
+  _exportTransitionDur = parseFloat(v)||0.5;
+  const lbl = document.getElementById('exportTransitionDurLbl');
+  if(lbl) lbl.textContent = _exportTransitionDur.toFixed(2)+'s';
 }
 
 function openExportModal(){
@@ -131,7 +151,9 @@ async function _doPywebviewExport(){
       burnCap ? JSON.stringify(S.textLayers) : '[]',
       // Flattened {path,start,end,posX,posY,posZ} — _make_filter_complex()
       // (serve.py) reads these fields directly, not nested under .style.
-      burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]'
+      burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
+      _exportTransitionType,
+      _exportTransitionDur
     );
 
     if(!result || result.error === 'cancelled') {
