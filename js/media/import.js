@@ -134,17 +134,33 @@ function loadClipFromPath(sourcePath) {
 function selectClip(id) {
   const c = S.clips.find(x=>x.id===id);
   if(!c) return;
+
+  // Persist the outgoing clip's edit state so switching clips doesn't lose
+  // or cross-contaminate detections/transcripts (bug #22) — mirrors the
+  // existing clip.segments pattern.
+  if(S.current && S.current.id!==id){
+    S.current.cuts = S.cuts;
+    S.current.captions = S.captions;
+    S.current.markers = S.markers;
+    S.current.waveformData = S.waveformData;
+    S.current.trimIn = S.trimIn;
+    S.current.trimOut = S.trimOut;
+  }
+
   S.current      = c;
   S.selectedClipId = id;
   S.selectedFindingId = null;
   S.selectedCutId = null;
   S.selectedSegmentId = null;
   S.segments  = c.segments || [];
+  S.cuts      = c.cuts || [];
+  S.captions  = c.captions || [];
+  S.markers   = c.markers || [];
   S.trimIn    = c.trimIn;
   S.trimOut   = c.trimOut;
   S.duration  = c.duration;
   S.fps       = c.fps || 30;
-  S.waveformData = null;
+  S.waveformData = c.waveformData || null;
   _captionFps = S.fps;
   video.src   = c.url;
   video.currentTime = c.trimIn;
@@ -153,6 +169,8 @@ function selectClip(id) {
   document.getElementById('propName').textContent = c.name.slice(0,16);
   document.getElementById('propDur').textContent  = fmt(c.duration);
   syncTopbarClipName();
+  updateCaptionList();
+  renderAllFindings();
 
   document.getElementById('propRes').textContent = c.file ? (c.file.size/1e6).toFixed(1)+'MB' : '…';
   video.onerror = null;
@@ -161,7 +179,8 @@ function selectClip(id) {
   video.onloadedmetadata = () => {
     document.getElementById('propRes').textContent = `${video.videoWidth}×${video.videoHeight}`;
     updateTrimUI();
-    extractAudioData(true);
+    if(!S.waveformData) extractAudioData(true);
+    else { sliceWaveforms(); renderTimeline(); }
   };
   video.onerror = () => {
     // Codec not supported even over HTTP (ProRes, etc.) — clip still works for export/transcription
