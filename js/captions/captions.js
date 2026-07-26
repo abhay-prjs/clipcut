@@ -46,19 +46,26 @@ function _mergeCaptionsIntoStrip(caps){
 
 // Group adjacent word-chunk captions into sentence-level blocks (closes on
 // .!? or a >1s gap) — the default mid-zoom timeline caption granularity.
+// Also force-closes on a max word count / max span so unpunctuated transcripts
+// (raw Whisper output often has no '.!?' at all) can't merge into one giant
+// block covering most of the clip.
+const _SENTENCE_MAX_WORDS = 10;
+const _SENTENCE_MAX_SPAN = 4; // seconds
 function _groupCaptionsIntoSentences(caps){
   const sorted=[...caps].sort((a,b)=>a.start-b.start);
-  const groups=[]; let cur=null;
+  const groups=[]; let cur=null, curWords=0;
   for(const c of sorted){
     if(!cur || c.start-cur.end>1){
       if(cur) groups.push(cur);
-      cur={start:c.start,end:c.end,text:c.text};
+      cur={start:c.start,end:c.end,text:c.text}; curWords=1;
     } else {
       cur.end=c.end;
       cur.text+=' '+c.text;
+      curWords++;
     }
     const last=(cur.text||'').trim().slice(-1);
-    if(last==='.'||last==='!'||last==='?'){ groups.push(cur); cur=null; }
+    const forceClose=curWords>=_SENTENCE_MAX_WORDS || (cur.end-cur.start)>=_SENTENCE_MAX_SPAN;
+    if(last==='.'||last==='!'||last==='?'||forceClose){ groups.push(cur); cur=null; curWords=0; }
   }
   if(cur) groups.push(cur);
   return groups;
