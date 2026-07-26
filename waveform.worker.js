@@ -6,6 +6,11 @@
 let tlCtx   = null;  // timeline waveform canvas context
 let modCtx  = null;  // modal waveform canvas context
 
+// Solid, no alpha — the previous rgba(78,205,196,0.55/0.7) read as a
+// translucent neon-mint glow against the dark track background. Opaque hex
+// keeps the same teal family (matches --tl-cap-border) without the glow look.
+const WAVE_COLOR = '#2F8F94';
+
 self.onmessage = function(e) {
   const msg = e.data;
 
@@ -38,7 +43,7 @@ self.onmessage = function(e) {
         slice.forEach(f => {
           const x = offsetPx + (f.t - seg.sourceStart) * zoom;
           const h = (f.rms / maxRms) * (H * 0.75);
-          tlCtx.fillStyle = 'rgba(78,205,196,0.55)';
+          tlCtx.fillStyle = WAVE_COLOR;
           tlCtx.fillRect(x, H / 2 - h / 2, Math.max(zoom * 0.05 - 0.5, 0.5), h);
         });
       });
@@ -48,7 +53,7 @@ self.onmessage = function(e) {
       frames.forEach(f => {
         const x = f.t * zoom;
         const h = (f.rms / maxRms) * (H * 0.75);
-        tlCtx.fillStyle = 'rgba(78,205,196,0.55)';
+        tlCtx.fillStyle = WAVE_COLOR;
         tlCtx.fillRect(x, H / 2 - h / 2, Math.max(zoom * 0.05 - 0.5, 0.5), h);
       });
     }
@@ -69,7 +74,7 @@ self.onmessage = function(e) {
     const bw = W / frames.length;
     frames.forEach((f, i) => {
       const h = (f.rms / maxRms) * (H * 0.8);
-      modCtx.fillStyle = 'rgba(78,205,196,0.7)';
+      modCtx.fillStyle = WAVE_COLOR;
       modCtx.fillRect(i * bw, H / 2 - h / 2, Math.max(bw - 0.5, 0.5), h);
     });
     return;

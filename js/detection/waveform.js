@@ -1,6 +1,11 @@
 // ═══════════════════════════════════════
 // AUDIO ANALYSIS (Web Audio API)
 // ═══════════════════════════════════════
+// Solid, no alpha — matches WAVE_COLOR in waveform.worker.js (kept identical
+// so the OffscreenCanvas and main-thread-fallback paths render the same
+// color; the old rgba(78,205,196,X) read as a translucent neon-mint glow).
+const WAVE_COLOR = '#2F8F94';
+
 async function extractAudioData(silent=false){
   if(!S.current)return null;
   if(!silent) toast('🔊 Analyzing audio waveform...');
@@ -72,7 +77,7 @@ function drawWaveformModal(frames) {
   const bw = W / frames.length;
   frames.forEach((f, i) => {
     const h = (f.rms / maxRms) * (H * 0.8);
-    ctx.fillStyle = 'rgba(78,205,196,0.7)';
+    ctx.fillStyle = WAVE_COLOR;
     ctx.fillRect(i * bw, H / 2 - h / 2, Math.max(bw - 0.5, 0.5), h);
   });
 }
@@ -126,7 +131,7 @@ function drawTimelineWaveform() {
       slice.forEach(f => {
         const x = offsetPx + (f.t - seg.sourceStart) * S.zoom;
         const h = (f.rms / maxRms) * (H * 0.75);
-        ctx.fillStyle = 'rgba(78,205,196,0.55)';
+        ctx.fillStyle = WAVE_COLOR;
         ctx.fillRect(x, H / 2 - h / 2, Math.max(S.zoom * 0.05 - 0.5, 0.5), h);
       });
     });
@@ -139,7 +144,7 @@ function drawTimelineWaveform() {
   frames.forEach(f => {
     const x = f.t * S.zoom;
     const h = (f.rms / maxRms) * (H * 0.75);
-    ctx.fillStyle = 'rgba(78,205,196,0.55)';
+    ctx.fillStyle = WAVE_COLOR;
     ctx.fillRect(x, H / 2 - h / 2, Math.max(S.zoom * 0.05 - 0.5, 0.5), h);
   });
 }
