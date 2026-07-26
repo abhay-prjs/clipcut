@@ -27,19 +27,25 @@
   --panel-w: 260px;
   --right-w: 280px;
 
-  /* Timeline redesign — solid fills, fixed per-type colors (see FIXNOTES_TIMELINE_PLAYBACK.md Part C2) */
-  --tl-seg-fill: #1B3A5C;
-  --tl-seg-border: #409CFF;
-  --tl-seg-text: #BFDBFE;
+  /* Timeline redesign — true flat solid blocks, CapCut-style (see FIXNOTES_TIMELINE_PLAYBACK.md Part C2).
+     Fill and border are the same hue family (border just one step darker for
+     a crisp edge, not a bright contrasting outline) — no light-fill/glow-border look. */
+  --tl-seg-fill: #2B6FD4;
+  --tl-seg-border: #1F52A3;
+  --tl-seg-text: #FFFFFF;
   --tl-cut-dead: #E5484D;
   --tl-cut-filler: #8E6FF7;
   --tl-cut-retake: #C92A2A;
   --tl-cut-weak: #D9A514;
   --tl-highlight: #2AB8A5;
   --tl-gap: #101013;
-  --tl-cap-fill: #0E3F4A;
-  --tl-cap-border: #64D2FF;
-  --tl-cap-text: #A8E6FF;
+  --tl-cap-fill: #1C9484;
+  --tl-cap-border: #147363;
+  --tl-cap-text: #FFFFFF;
+  --tl-text-fill: #D9822B;
+  --tl-text-border: #A9611B;
+  --tl-img-fill: #7C5CD9;
+  --tl-img-border: #5B3FAD;
 }
 
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -303,8 +309,8 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .tl-gap{position:absolute;top:3px;bottom:3px;z-index:1;border-radius:4px;pointer-events:none;
   background:repeating-linear-gradient(45deg, var(--tl-gap), var(--tl-gap) 6px, #1a1a1e 6px, #1a1a1e 12px);}
 
-.tl-clip{position:absolute;top:3px;bottom:3px;z-index:2;background:var(--tl-seg-fill);border:1px solid var(--tl-seg-border);border-radius:6px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:var(--tl-seg-text);white-space:nowrap;}
-.tl-clip:hover{border-color:var(--blue-soft);}
+.tl-clip{position:absolute;top:3px;bottom:3px;z-index:2;background:var(--tl-seg-fill);border:1px solid var(--tl-seg-border);border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:var(--tl-seg-text);white-space:nowrap;}
+.tl-clip:hover{filter:brightness(1.12);}
 .tl-clip.caption{background:var(--tl-cap-fill);border-color:var(--tl-cap-border);color:var(--tl-cap-text);font-size:8.5px;}
 .tl-clip.selected,.seg-selected{border-color:#fff !important;box-shadow:0 0 0 1px rgba(255,255,255,.5) inset;}
 
@@ -322,13 +328,13 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 /* Text layer track ("Add Text") — solid accent-colored block, same 1-element-
    per-object convention as segments/cuts/captions. */
-.tl-textlayer{position:absolute;top:3px;bottom:3px;background:#5C3A1B;border:1px solid var(--accent);border-radius:6px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:#FFD9A8;white-space:nowrap;}
-.tl-textlayer:hover{border-color:#FFB84D;}
+.tl-textlayer{position:absolute;top:3px;bottom:3px;background:var(--tl-text-fill);border:1px solid var(--tl-text-border);border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:#FFFFFF;white-space:nowrap;}
+.tl-textlayer:hover{filter:brightness(1.12);}
 .tl-textlayer.selected{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.5) inset;}
 
 /* Image/sticker layer track — same 1-element-per-object convention, purple family */
-.tl-imagelayer{position:absolute;top:3px;bottom:3px;background:#3A2F5C;border:1px solid #8E6FF7;border-radius:6px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:#DACCFF;white-space:nowrap;}
-.tl-imagelayer:hover{border-color:#B0A0FF;}
+.tl-imagelayer{position:absolute;top:3px;bottom:3px;background:var(--tl-img-fill);border:1px solid var(--tl-img-border);border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:#FFFFFF;white-space:nowrap;}
+.tl-imagelayer:hover{filter:brightness(1.12);}
 .tl-imagelayer.selected{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.5) inset;}
 
 .tl-marquee{position:absolute;top:28px;height:86px;background:rgba(10,132,255,.1);border:1px solid rgba(10,132,255,.5);border-radius:4px;pointer-events:none;z-index:15;display:none;}
