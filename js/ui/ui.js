@@ -189,6 +189,7 @@ function deleteSelectedCut(){
 function toggleScriptPart(cutId){
   const cut=S.cuts.find(c=>c.id===cutId);
   if(!cut) return;
+  saveHistory();
   cut.scriptPart=!cut.scriptPart;
   if(cut.scriptPart){
     cut.skipEnabled=false;
@@ -207,6 +208,7 @@ function toggleScriptPart(cutId){
 function toggleCutSkip(cutId){
   const cut=S.cuts.find(c=>c.id===cutId);
   if(!cut) return;
+  saveHistory();
   cut.skipEnabled=cut.skipEnabled===false?true:false;
   buildPlaySegments();
   renderTimeline();

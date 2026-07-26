@@ -51,6 +51,7 @@ function getSilenceSettings(){
 // ═══════════════════════════════════════
 async function analyzeAudio(){
   if(!S.current){toast('No video loaded');return;}
+  saveHistory();
 
   // ── Primary: server-side ffmpeg silencedetect ──────────────────
   const _ss        = getSilenceSettings();
@@ -103,6 +104,7 @@ async function analyzeAudio(){
 
 async function detectDeadSpaces(){
   if(!S.current?.sourcePath){ toast('No video loaded'); return; }
+  saveHistory();
   const ts=Date.now();
 
   // VAD path — runs on raw audio, no caption dependency
@@ -165,6 +167,7 @@ const FILLER_WORDS=['um','uh','like','you know','literally','basically','actuall
 
 function detectFillers(){
   if(!S.captions.length){toast('Transcribe first');return;}
+  saveHistory();
   const ts=Date.now();
   const newCuts=[];
   S.captions.forEach(c=>{
@@ -303,6 +306,7 @@ function renderAllFindings(){
 function toggleCutSelected(cutId){
   const cut=S.cuts.find(c=>c.id===cutId);
   if(!cut) return;
+  saveHistory();
   cut.selected=!cut.selected;
   renderAllFindings();
   renderTimeline();
@@ -478,6 +482,12 @@ async function runAutoMode(deep=false){
   const st=S.settings;
   let step=1;
   try{
+    // The whole chain is one logical action — withHistoryBatch() snapshots
+    // once up front and suppresses the individual saveHistory() calls inside
+    // transcribeWithWhisper/detectDeadSpaces/detectFillers/runAIScriptAnalysis
+    // for the duration, so a single Undo afterward goes all the way back to
+    // the pre-Auto-Mode state instead of needing one Undo per internal step.
+    await withHistoryBatch(async () => {
     if(st.autoTranscribe){
       btn.textContent=`⏳ Step ${step++}: Transcribing...`;
       toast(`⚡ Auto Mode — Transcribing...`);
@@ -524,6 +534,7 @@ async function runAutoMode(deep=false){
         }
       }
     }
+    });
 
     switchTab('silence');
     const totalFindings=S.cuts.length;

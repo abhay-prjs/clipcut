@@ -28,10 +28,33 @@ function _makeSnapshot(){
   };
 }
 
+// When true, saveHistory() is a no-op — used by withHistoryBatch() so a
+// multi-step pipeline (Auto Mode/Deep AI Mode chaining transcribe → detect →
+// AI analysis) creates exactly ONE undo checkpoint for the whole run instead
+// of one per internal step (which would need several undos to get back to
+// the pre-pipeline state).
+let _historySuppressed = false;
+
 function saveHistory(){
+  if(_historySuppressed) return;
   S.undoStack.push(JSON.stringify(_makeSnapshot()));
   if(S.undoStack.length > 50) S.undoStack.shift();
   S.redoStack = []; // new action always kills redo branch
+}
+
+// Snapshots once, then suppresses saveHistory() for the duration of fn (which
+// may itself call functions that individually call saveHistory() when run
+// standalone). Restores suppression state in finally so a thrown/rejected fn
+// can't leave saveHistory() permanently disabled.
+async function withHistoryBatch(fn){
+  saveHistory();
+  const prev = _historySuppressed;
+  _historySuppressed = true;
+  try {
+    await fn();
+  } finally {
+    _historySuppressed = prev;
+  }
 }
 
 function _applySnapshot(snap){

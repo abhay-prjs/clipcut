@@ -906,6 +906,10 @@ Return findings JSON.`;
     if(!findings || !findings.length)
       throw new Error(`Could not parse JSON from model response.\n\nRaw output:\n${rawContent.slice(0,400)}`);
 
+    // Snapshot right before mutating S.cuts — only once the AI call actually
+    // succeeded, so a failed/empty response doesn't create a no-op undo step.
+    saveHistory();
+
     // ── Map to S.cuts ────────────────────────────────────────────────
     const ts = Date.now();
     const newCuts = findings.map((f,i)=>({
@@ -966,6 +970,7 @@ async function runAIAnalysis(){
   const rawSegs=detectSilences(frames);
   if(!rawSegs.length){body.innerHTML='<div class="empty-state">No significant silences detected with current settings.</div>';return;}
 
+  saveHistory(); // before either the AI-annotated or fallback branch mutates S.cuts
   const segSummary=rawSegs.map((s,i)=>`Segment ${i+1}: ${s.start.toFixed(2)}s–${s.end.toFixed(2)}s (${(s.end-s.start).toFixed(2)}s)`).join('\n');
   const prompt=`You're an expert video editor reviewing silence segments in a UGC/creator video that's ${S.duration.toFixed(1)}s long.
 
