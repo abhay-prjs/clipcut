@@ -22,6 +22,8 @@ function _makeSnapshot(){
     trimOut:           S.trimOut,
     markers:           JSON.parse(JSON.stringify(S.markers)),
     current:           S.current ? {id:S.current.id} : null,
+    aspect:            S.aspect,
+    aspectMode:        S.aspectMode,
   };
 }
 

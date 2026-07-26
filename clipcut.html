@@ -777,6 +777,16 @@
         <button id="burnCapsBtn" class="act-btn" style="margin:0;width:auto;padding:3px 10px;font-size:9px" onclick="toggleBurnCaptions()">OFF</button>
       </div>
 
+      <!-- Aspect crop/pad -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:9.5px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px">Aspect ratio output (<span id="exportAspectLbl"></span>)</div>
+        <div style="display:flex;gap:6px">
+          <button id="aspectModeCrop" class="act-btn primary" style="margin:0;flex:1;font-size:10px" onclick="setAspectMode('crop')">Crop to fill</button>
+          <button id="aspectModePad"  class="act-btn"         style="margin:0;flex:1;font-size:10px" onclick="setAspectMode('pad')">Pad to fit</button>
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:4px">Matches the preview box aspect selected in the Video tab</div>
+      </div>
+
       <!-- Progress panel (hidden until export starts) -->
       <div id="exportProgress" style="display:none;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px;margin-bottom:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">

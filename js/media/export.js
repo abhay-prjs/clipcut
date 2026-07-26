@@ -96,6 +96,9 @@ function openExportModal(){
   setExportFormat(_exportFormat);
   setExportPreset(_exportPreset);
 
+  document.getElementById('exportAspectLbl').textContent = S.aspect.replace('/',':');
+  setAspectMode(S.aspectMode);
+
   openModal('exportModal');
 }
 
@@ -142,7 +145,9 @@ async function _doPywebviewExport(){
       S.flipV,
       _exportBurnCap,
       _exportBurnCap ? JSON.stringify(S.captions) : '[]',
-      _exportBurnCap ? JSON.stringify(segMeta) : '[]'
+      _exportBurnCap ? JSON.stringify(segMeta) : '[]',
+      S.aspect,
+      S.aspectMode
     );
 
     if(!result || result.error === 'cancelled') {

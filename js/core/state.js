@@ -11,6 +11,8 @@ const S = {
   flipH: false, flipV: false,
   trimIn: 0, trimOut: 0, duration: 0,
   fps: 30, // real source fps when probed at import, else this default
+  aspect: '9/16',       // target export aspect ratio (also drives preview box) — 'w/h'
+  aspectMode: 'crop',   // 'crop' (crop-to-fill) | 'pad' (pad-to-fit, letterbox)
   captions: [],
   cuts: [],              // [{id,start,end,type,selected,aiNote}] — unified silence + filler cuts
   segments: [],          // timeline segment model

@@ -40,6 +40,13 @@ function setAspect(r,el){
   document.querySelectorAll('.ab').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('videoContainer').style.aspectRatio=r;
+  S.aspect=r; // also drives the export-side crop/pad stage (bug #21) — preview was previously CSS-only
+}
+
+function setAspectMode(mode){
+  S.aspectMode=mode;
+  document.getElementById('aspectModeCrop').classList.toggle('primary', mode==='crop');
+  document.getElementById('aspectModePad').classList.toggle('primary', mode==='pad');
 }
 
 // ═══════════════════════════════════════

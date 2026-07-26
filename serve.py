@@ -237,7 +237,29 @@ def _nvenc_args(p):
 def _x264_args(p):
     return ['-c:v', 'libx264', '-preset', p['x264'], '-crf', p['crf']]
 
-def _make_filter_complex(segments, flip_filter, srt_path=None):
+def _aspect_filter(aspect, mode):
+    """Crop-to-fill or pad-to-fit ffmpeg filter for a target aspect ratio
+    like '9/16'. Uses ffmpeg's iw/ih expressions so it works at native
+    resolution without a separate scale step. Returns '' if aspect is falsy
+    (export ignores aspect entirely, matching bug #21's WYSIWYG fix)."""
+    if not aspect:
+        return ''
+    try:
+        tw_s, th_s = aspect.split('/')
+        tw, th = float(tw_s), float(th_s)
+        if tw <= 0 or th <= 0:
+            return ''
+    except Exception:
+        return ''
+    if mode == 'pad':
+        w = f"trunc(max(iw,ih*{tw}/{th})/2)*2"
+        h = f"trunc(max(ih,iw*{th}/{tw})/2)*2"
+        return f"pad=w='{w}':h='{h}':x='(ow-iw)/2':y='(oh-ih)/2':color=black"
+    w = f"trunc(min(iw,ih*{tw}/{th})/2)*2"
+    h = f"trunc(min(ih,iw*{th}/{tw})/2)*2"
+    return f"crop='{w}':'{h}'"
+
+def _make_filter_complex(segments, flip_filter, srt_path=None, aspect_filter=''):
     parts = []
     for i, seg in enumerate(segments):
         s, e = round(seg["start"], 3), round(seg["end"], 3)
@@ -251,6 +273,9 @@ def _make_filter_complex(segments, flip_filter, srt_path=None):
         esc = srt_path.replace("\\", "/").replace(":", "\\:")
         parts.append(f"[outv]subtitles='{esc}'[subv]")
         out_v = "[subv]"
+    if aspect_filter:
+        parts.append(f"{out_v}{aspect_filter}[av]")
+        out_v = "[av]"
     if flip_filter:
         parts.append(f"{out_v}{flip_filter}[fv]")
         out_v = "[fv]"
@@ -806,7 +831,8 @@ class API:
 
     def export_video(self, source_path, segments_json, output_name,
                      preset='fast', flip_h=False, flip_v=False,
-                     burn_captions=False, captions_json='[]', seg_meta_json='[]'):
+                     burn_captions=False, captions_json='[]', seg_meta_json='[]',
+                     aspect='', aspect_mode='crop'):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -816,12 +842,17 @@ class API:
 
         Fallback (burn_captions=True):
           - filter_complex single-pass with SRT overlay
+
+        aspect: target ratio like '9/16', or '' to export at source aspect
+        (bug #21 — export previously ignored the preview's aspect entirely).
+        aspect_mode: 'crop' (crop-to-fill, default) | 'pad' (pad-to-fit).
         """
         try:
             return self._export_video_inner(
                 source_path, segments_json, output_name,
                 preset, flip_h, flip_v,
-                burn_captions, captions_json, seg_meta_json
+                burn_captions, captions_json, seg_meta_json,
+                aspect, aspect_mode
             )
         except Exception as exc:
             import traceback
@@ -831,12 +862,14 @@ class API:
 
     def _export_video_inner(self, source_path, segments_json, output_name,
                             preset, flip_h, flip_v,
-                            burn_captions, captions_json, seg_meta_json):
+                            burn_captions, captions_json, seg_meta_json,
+                            aspect='', aspect_mode='crop'):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
         log('EXPORT', f'output_name:  {output_name}')
-        log('EXPORT', f'preset:       {preset}  flip_h={flip_h}  flip_v={flip_v}  burn_captions={burn_captions}')
+        log('EXPORT', f'preset:       {preset}  flip_h={flip_h}  flip_v={flip_v}  burn_captions={burn_captions}'
+                       f'  aspect={aspect or "source"}  aspect_mode={aspect_mode}')
 
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
@@ -859,22 +892,24 @@ class API:
             return {'success': False, 'error': 'No segments provided'}
 
         p           = PRESET_MAP.get(preset, PRESET_MAP['fast'])
-        flip_parts  = (['hflip'] if flip_h else []) + (['vflip'] if flip_v else [])
-        flip_filter = ','.join(flip_parts)
-        total_dur   = sum(seg['end'] - seg['start'] for seg in segments)
+        flip_parts    = (['hflip'] if flip_h else []) + (['vflip'] if flip_v else [])
+        flip_filter   = ','.join(flip_parts)
+        aspect_filter = _aspect_filter(aspect, aspect_mode)
+        total_dur     = sum(seg['end'] - seg['start'] for seg in segments)
 
         log('EXPORT', f'Segments: {len(segments)}  total output: {total_dur:.2f}s')
         for i, s in enumerate(segments):
             log('EXPORT', f'  seg[{i}]  {s["start"]:.3f}s → {s["end"]:.3f}s  ({s["end"]-s["start"]:.3f}s)')
         log('EXPORT', f'nvenc preset: {p["nvenc"]}  bitrate: {p["bitrate"]}' +
             (f'  tune: {p["tune"]}' if p.get("tune") else '') +
-            (f'  flip: {flip_filter}' if flip_filter else ''))
+            (f'  flip: {flip_filter}' if flip_filter else '') +
+            (f'  aspect_filter: {aspect_filter}' if aspect_filter else ''))
 
         if burn_captions:
             log('EXPORT', 'Mode: filter_complex + SRT burn-in (single-pass)')
             return self._export_burnin(
                 source_path, segments, save_path, p, flip_filter,
-                json.loads(captions_json), json.loads(seg_meta_json)
+                json.loads(captions_json), json.loads(seg_meta_json), aspect_filter
             )
 
         t_start = time.time()
@@ -886,13 +921,13 @@ class API:
                 log('EXPORT', 'Mode: single-segment  →  direct hwaccel encode')
                 self._push_progress(0, 'Encoding (GPU)…')
                 ok, err = self._encode_segment(
-                    source_path, segments[0], save_path, p, flip_filter, 0, 100
+                    source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter
                 )
                 if not ok and not self._export_cancelled:
                     log('EXPORT', '✕ GPU encode failed — retrying CPU')
                     self._push_progress(0, 'GPU failed — retrying CPU…')
                     ok, err = self._encode_segment_cpu(
-                        source_path, segments[0], save_path, p, flip_filter, 0, 100
+                        source_path, segments[0], save_path, p, flip_filter, 0, 100, aspect_filter
                     )
             else:
                 log('EXPORT', f'Mode: two-pass  ({len(segments)} segments  →  concat copy)')
@@ -910,14 +945,14 @@ class API:
                     log('EXPORT', f'Encoding seg[{i}]  {seg["start"]:.3f}→{seg["end"]:.3f}s  (GPU)  {pct_start}%→{pct_end}%')
                     self._push_progress(pct_start, f'Encoding segment {i+1}/{len(segments)} (GPU)…')
                     ok, err = self._encode_segment(
-                        source_path, seg, seg_path, p, flip_filter, pct_start, pct_end
+                        source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter
                     )
                     if not ok and not self._export_cancelled:
                         log('EXPORT', f'✕ GPU seg[{i}] failed — retrying CPU')
                         log('EXPORT', f'stderr: {err[-300:]}')
                         self._push_progress(pct_start, f'Encoding segment {i+1}/{len(segments)} (CPU)…')
                         ok, err = self._encode_segment_cpu(
-                            source_path, seg, seg_path, p, flip_filter, pct_start, pct_end
+                            source_path, seg, seg_path, p, flip_filter, pct_start, pct_end, aspect_filter
                         )
                     if not ok:
                         log('EXPORT', f'✕ seg[{i}] failed on both GPU and CPU')
@@ -1031,10 +1066,11 @@ class API:
             log('FFMPEG', '────────────────────────────────────────')
         return ok, stderr
 
-    def _encode_segment(self, source, seg, out_path, p, flip_filter, pct_start, pct_end):
-        dur    = round(seg['end'] - seg['start'], 3)
-        seg_us = int(dur * 1_000_000)
-        vf     = ['-vf', flip_filter] if flip_filter else []
+    def _encode_segment(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter=''):
+        dur      = round(seg['end'] - seg['start'], 3)
+        seg_us   = int(dur * 1_000_000)
+        vf_parts = [f for f in (aspect_filter, flip_filter) if f]
+        vf       = ['-vf', ','.join(vf_parts)] if vf_parts else []
         cmd    = (
             ['ffmpeg', '-y', '-hwaccel', 'auto',
              '-ss', str(round(seg['start'], 3)), '-t', str(dur),
@@ -1045,10 +1081,11 @@ class API:
         )
         return self._run_ffmpeg(cmd, seg_us, pct_start, pct_end)
 
-    def _encode_segment_cpu(self, source, seg, out_path, p, flip_filter, pct_start, pct_end):
-        dur    = round(seg['end'] - seg['start'], 3)
-        seg_us = int(dur * 1_000_000)
-        vf     = ['-vf', flip_filter] if flip_filter else []
+    def _encode_segment_cpu(self, source, seg, out_path, p, flip_filter, pct_start, pct_end, aspect_filter=''):
+        dur      = round(seg['end'] - seg['start'], 3)
+        seg_us   = int(dur * 1_000_000)
+        vf_parts = [f for f in (aspect_filter, flip_filter) if f]
+        vf       = ['-vf', ','.join(vf_parts)] if vf_parts else []
         cmd    = (
             ['ffmpeg', '-y',
              '-ss', str(round(seg['start'], 3)), '-t', str(dur),
@@ -1059,7 +1096,7 @@ class API:
         )
         return self._run_ffmpeg(cmd, seg_us, pct_start, pct_end)
 
-    def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta):
+    def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta, aspect_filter=''):
         """filter_complex single-pass with SRT caption burn-in."""
         total_dur = sum(seg['end'] - seg['start'] for seg in segments)
         total_us  = int(total_dur * 1_000_000)
@@ -1088,6 +1125,8 @@ class API:
             if srt_path:
                 esc = srt_path.replace('\\', '/').replace(':', '\\:')
                 vf.append(f"subtitles='{esc}'")
+            if aspect_filter:
+                vf.append(aspect_filter)
             if flip_filter:
                 vf.append(flip_filter)
             base    = (['ffmpeg', '-y', '-ss', str(round(seg['start'], 3)), '-t', str(dur),
@@ -1097,8 +1136,8 @@ class API:
             cmd_cpu = base + vf_args + _x264_args(p)  + ['-c:a', 'aac', save_path]
         else:
             base           = ['ffmpeg', '-y', '-i', source_path] + prog_flags
-            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, srt_path)
-            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, srt_path)
+            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, srt_path, aspect_filter)
+            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, srt_path, aspect_filter)
             cmd_gpu = (base + ['-filter_complex', fc_gpu, '-map', ov_gpu, '-map', '[outa]']
                        + _nvenc_args(p) + ['-c:a', 'aac', save_path])
             cmd_cpu = (base + ['-filter_complex', fc_cpu, '-map', ov_cpu, '-map', '[outa]']
