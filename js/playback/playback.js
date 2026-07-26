@@ -99,6 +99,13 @@ function _startRVFC() {
   _rVFCHandle = video.requestVideoFrameCallback(_onVideoFrame);
 }
 
+// Guards against seek-storm double-jumps: between assigning video.currentTime
+// and video.seeking actually flipping true, 1-2 rVFC callbacks can still fire
+// with the stale pre-seek mediaTime. Track the pending target and ignore
+// frames until mediaTime has caught up to it.
+let _seekTarget = null, _seekTargetSetAt = 0;
+function _jumpTo(t){ _seekTarget = t; _seekTargetSetAt = performance.now(); video.currentTime = t; }
+
 function _onVideoFrame(now, metadata) {
   // Re-register first so the loop continues without gaps
   _rVFCHandle = video.requestVideoFrameCallback(_onVideoFrame);
@@ -107,17 +114,23 @@ function _onVideoFrame(now, metadata) {
 
   // While seeking (programmatic or user scrub) skip all jump logic to prevent oscillation
   if(video.seeking) return;
+  if(_seekTarget !== null){
+    // Give up waiting after 500ms so a seek that never quite lands (clamped
+    // target, external interruption) can't permanently freeze the loop.
+    if(Math.abs(t - _seekTarget) > 0.03 && performance.now() - _seekTargetSetAt < 500) return;
+    _seekTarget = null;
+  }
 
   // Loop region
   if(S.looping && S.loopA !== null && S.loopB !== null){
-    if(t >= S.loopB){ video.currentTime = S.loopA; return; }
+    if(t >= S.loopB){ _jumpTo(S.loopA); return; }
   }
   // Segment boundary — jump to next segment (handles both applied cuts and skip-mode cuts)
   if(S.playSegments.length && S.playing){
     // If before first segment (applied cut at start) — jump to it
     if(t < S.playSegments[0].start - 0.05){
       S.currentSegmentIdx = 0;
-      video.currentTime = S.playSegments[0].start;
+      _jumpTo(S.playSegments[0].start);
       return;
     }
   }
@@ -135,7 +148,7 @@ function _onVideoFrame(now, metadata) {
     if(curSeg && t >= curSeg.end - 0.05){
       if(S.currentSegmentIdx < S.playSegments.length - 1){
         S.currentSegmentIdx++;
-        video.currentTime = S.playSegments[S.currentSegmentIdx].start;
+        _jumpTo(S.playSegments[S.currentSegmentIdx].start);
         return;
       } else {
         _pauseVideo();
@@ -146,7 +159,7 @@ function _onVideoFrame(now, metadata) {
   // Fallback: skip cuts the video seeked into directly (inline seek into a cut region)
   if(S.skipCuts && S.cuts.length){
     const hit = S.cuts.find(s => s.selected && s.skipEnabled !== false && s.scriptPart !== true && t >= s.start && t < s.end);
-    if(hit && S.playing){ video.currentTime = hit.end; return; }
+    if(hit && S.playing){ _jumpTo(hit.end); return; }
   }
   // Trim out
   if(S.trimOut && t >= S.trimOut){
