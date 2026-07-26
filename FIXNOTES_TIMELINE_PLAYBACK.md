@@ -158,9 +158,13 @@ ever needs multi-track compositing preview.
   the `.selected` outline.
 - **F-B3 · DocumentFragment batching** everywhere nodes are appended in loops
   (ruler, cuts, captions): build in a fragment, append once.
-- **F-B4 · Event delegation.** One `click` listener on `#videoTrack` and one on
-  `#captionTrack`; resolve the target via `e.target.closest('[data-seg-id],[data-cut-id]')`.
-  Removes thousands of listener attachments per rebuild.
+- **F-B4 · Event delegation.** ⏸ DEFERRED — the on-timeline cut drag (§C6, done)
+  needs `setPointerCapture()` on the actual dragged element, which doesn't fit
+  a delegated listener on the container, so cuts stay per-element regardless.
+  Segments/captions could still delegate, but F-B1 virtualization (next) will
+  already cut the live element count to roughly what's visible on screen,
+  which was the actual cost driver this item was chasing — revisit only if
+  profiling after F-B1 still shows listener-attach cost.
 - **F-B5 · CSS containment.** `contain: layout paint` (or `content`) on
   `.track-row`, `.waveform-row`, `#ruler`; drop the `transition` on `.tl-clip`
   (keep it only on `.tl-clip.selected` if wanted).
