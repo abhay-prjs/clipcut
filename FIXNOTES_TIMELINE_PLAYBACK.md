@@ -468,9 +468,9 @@ own task rather than folding into this pass.
 #8 project save/autosave → #10 text-style state → templates → drag-in-preview →
 ASS burn-in → #6-adjacent editor feel: frame-step keys (←/→ = 1 frame), segment
 edge-drag trimming, snap-to-word-boundary while dragging cuts.
-*Not started:* templates, drag-in-preview, frame-step keys, segment edge-drag
-trimming. *ASS burn-in (#10's remaining half) done in a later session —
-see the bug #10 row above.*
+*Not started:* templates, drag-in-preview, frame-step keys. *ASS burn-in
+(#10's remaining half) and segment edge-drag trimming both done in a later
+session — see the bug #10 row above and Part F1's table.*
 
 **Phase 6 — cleanup** ✅ DONE — commits d0f9306..34616f6 (plus #12/#14/#16 done earlier in Phases 1/4).
 #11, #12, #14, #15, #16, #17, #19 — all 7 done.
@@ -519,10 +519,20 @@ makeTrimmable(el, {
 })
 ```
 
+**Implemented as three separate functions instead of one shared helper**
+(`_bindCutDrag`, `_bindCaptionDrag`, `_bindSegmentDrag`, all in
+`js/timeline/trim.js`) — each object's clamping/commit rules differ enough
+(cuts snap to word/cut/segment/playhead edges and move freely; captions clamp
+to immediate neighbors only; segments clamp to neighbors *and* have no
+center-drag at all) that a single generic `makeTrimmable()` would need most of
+its behavior overridden per call site anyway. Three focused functions with
+duplicated but readable structure beat one abstraction fighting its own
+callbacks — revisit only if a fourth object type needs the same grammar.
+
 | Object | Edge drag | Center drag | Extras |
 |---|---|---|---|
 | Cut block | resize cut | move cut (keep duration) | seek-on-release audition |
-| Segment | slip trim (`sourceStart/End`) | — (v1) | optional **ripple mode** toggle: downstream segments shift live to close the gap (CapCut's default feel) |
+| Segment | ✅ slip trim (`sourceStart/End`) via `_bindSegmentDrag` | — (v1, as spec'd) | ✅ **ripple mode** — no new toggle needed, it's `S.snapped`: `_relayoutSegments()` already ripples downstream segments when snapped, stays gap-preserving when not |
 | Caption block | retime caption | move caption | double-click = edit text (exists) |
 | Text layer (future) | retime | move in time | drag in *preview box* moves in space (§audit v1) |
 | Music/B-roll (future) | trim | move | same grammar, zero new learning |

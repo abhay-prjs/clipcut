@@ -71,6 +71,7 @@ function renderTimeline(){
       el.classList.add('selected');
       updateTrimContext();
     });
+    _bindSegmentDrag(el, seg);
     vtFrag.appendChild(el);
   });
 

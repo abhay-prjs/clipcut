@@ -506,3 +506,90 @@ function _bindCaptionDrag(el, cap){
     renderTimeline();
   });
 }
+
+// ═══════════════════════════════════════
+// ON-TIMELINE SEGMENT EDGE-DRAG (F1 — universal trim grammar, segments)
+// ═══════════════════════════════════════
+// Slip-trims a kept segment's sourceStart/sourceEnd by dragging its edges —
+// center-drag ("move") is deliberately out of scope for v1 (segments aren't
+// freely repositionable the way a cut or caption is; only the click-to-select
+// behavior lives on the center, unchanged). Bounded by the neighboring
+// segment's own source range so you can't eat into content another kept
+// segment owns, but CAN extend into an adjacent gap — un-cutting part of it.
+//
+// "Ripple mode" from the original spec needed no new state: it's already
+// S.snapped. _relayoutSegments() (called after every mutation here) lays out
+// contiguously when snapped — so extending a segment automatically pushes
+// every downstream segment along, i.e. ripples — and gap-preserving
+// (sourceStart-based, no ripple) when not snapped. Toggling Snap Gaps is the
+// ripple toggle.
+function _segmentNeighborBounds(seg){
+  const idx=S.segments.indexOf(seg);
+  const prevEnd   = idx>0 ? S.segments[idx-1].sourceEnd : 0;
+  const nextStart = idx<S.segments.length-1 ? S.segments[idx+1].sourceStart : S.duration;
+  return {prevEnd, nextStart};
+}
+
+function _bindSegmentDrag(el, seg){
+  const EDGE=8;
+  let mode=null, startX=0, startSourceStart=0, startSourceEnd=0, historySaved=false;
+
+  el.addEventListener('mousemove', e=>{
+    if(mode) return;
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    el.style.cursor = (offsetX<=EDGE||offsetX>=rect.width-EDGE) ? 'ew-resize' : 'pointer';
+  });
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    if(offsetX>EDGE && offsetX<rect.width-EDGE) return; // center — leave to the existing click-to-select handler
+    e.stopPropagation();
+    mode = offsetX<=EDGE ? 'resize-l' : 'resize-r';
+    startX=e.clientX;
+    startSourceStart=seg.sourceStart;
+    startSourceEnd=seg.sourceEnd;
+    historySaved=false;
+    el.setPointerCapture(e.pointerId);
+  });
+
+  el.addEventListener('pointermove', e=>{
+    if(!mode) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    let deltaSec=(e.clientX-startX)/S.zoom;
+    if(e.shiftKey) deltaSec*=0.25;
+
+    const {prevEnd,nextStart}=_segmentNeighborBounds(seg);
+    if(mode==='resize-l'){
+      seg.sourceStart=Math.max(prevEnd, Math.min(startSourceStart+deltaSec, seg.sourceEnd-0.1));
+    } else {
+      seg.sourceEnd=Math.min(nextStart, Math.max(startSourceEnd+deltaSec, seg.sourceStart+0.1));
+    }
+    seg.duration=seg.sourceEnd-seg.sourceStart;
+    _relayoutSegments();
+
+    // Live-nudge every existing segment element's position/width directly.
+    // Ripple (snapped) can shift every downstream segment, but calling
+    // renderTimeline() mid-drag would destroy this element (and its active
+    // pointer capture) the moment the DOM rebuilds — same trap _bindCutDrag/
+    // _bindCaptionDrag avoid by nudging styles instead of re-rendering.
+    // Gap-hatch bars go stale for the duration of the drag (they're rebuilt
+    // fresh on pointerup) — a minor visual nit, not worth rebuilding the DOM for.
+    S.segments.forEach(s=>{
+      const segEl=document.querySelector(`.tl-clip[data-seg-id="${s.id}"]`);
+      if(!segEl) return;
+      segEl.style.left=(s.timelineStart*S.zoom)+'px';
+      segEl.style.width=Math.max(s.duration*S.zoom,20)+'px';
+    });
+  });
+
+  el.addEventListener('pointerup', e=>{
+    if(!mode) return;
+    mode=null; historySaved=false;
+    buildPlaySegments();
+    sliceWaveforms();
+    renderTimeline();
+  });
+}
