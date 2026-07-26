@@ -399,6 +399,27 @@ class API:
         log('PROBE', f'duration: {dur:.3f}s')
         return dur
 
+    def probe_fps(self, source_path):
+        """Use ffprobe to get the video's real frame rate. Returns float, 0 on failure."""
+        log('PROBE', f'probing fps: {source_path}')
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=r_frame_rate',
+             '-of', 'default=noprint_wrappers=1:nokey=1', source_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        raw = result.stdout.strip()
+        try:
+            if '/' in raw:
+                num, den = raw.split('/')
+                fps = float(num) / float(den) if float(den) != 0 else 0
+            else:
+                fps = float(raw or 0)
+        except Exception:
+            fps = 0
+        log('PROBE', f'fps: {fps:.3f}')
+        return fps
+
     def load_ui_settings(self):
         """Load persisted UI/pipeline settings from ui_settings.json."""
         path = os.path.join(BASE_DIR, 'ui_settings.json')

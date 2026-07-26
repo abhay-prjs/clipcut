@@ -10,6 +10,7 @@ const S = {
   playing: false,
   flipH: false, flipV: false,
   trimIn: 0, trimOut: 0, duration: 0,
+  fps: 30, // real source fps when probed at import, else this default
   captions: [],
   cuts: [],              // [{id,start,end,type,selected,aiNote}] — unified silence + filler cuts
   segments: [],          // timeline segment model

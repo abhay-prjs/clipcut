@@ -17,8 +17,15 @@ function loadClip(file) {
 
   const id   = crypto.randomUUID();
   const clip = {id, file, url, name:file.name, duration:0, trimIn:0, trimOut:null, silCuts:[],
-                sourcePath, browserPlayable:null};
+                sourcePath, browserPlayable:null, fps:30};
   _clipRegistry[id] = {file, url};
+  if(sourcePath && window.pywebview){
+    window.pywebview.api.probe_fps(sourcePath).then(f=>{
+      if(f<=0) return;
+      clip.fps=f;
+      if(S.current===clip){ S.fps=f; _captionFps=f; }
+    }).catch(()=>{});
+  }
 
   const tmp = document.createElement('video');
   tmp.src   = url;
@@ -77,7 +84,12 @@ function loadClipFromPath(sourcePath) {
   // can access it — file:// URLs are blocked cross-origin from HTTP pages.
   const fileUrl = `${window.location.origin}/video?path=${encodeURIComponent(sourcePath)}`;
   const id      = crypto.randomUUID();
-  const clip    = {id, file:null, url:fileUrl, name, sourcePath, duration:0, trimIn:0, trimOut:null, silCuts:[], browserPlayable:null};
+  const clip    = {id, file:null, url:fileUrl, name, sourcePath, duration:0, trimIn:0, trimOut:null, silCuts:[], browserPlayable:null, fps:30};
+  window.pywebview.api.probe_fps(sourcePath).then(f=>{
+    if(f<=0) return;
+    clip.fps=f;
+    if(S.current===clip){ S.fps=f; _captionFps=f; }
+  }).catch(()=>{});
 
   const finalize = (duration) => {
     clip.duration = duration;
@@ -131,7 +143,9 @@ function selectClip(id) {
   S.trimIn    = c.trimIn;
   S.trimOut   = c.trimOut;
   S.duration  = c.duration;
+  S.fps       = c.fps || 30;
   S.waveformData = null;
+  _captionFps = S.fps;
   video.src   = c.url;
   video.currentTime = c.trimIn;
   document.getElementById('noVideoMsg').style.display='none';

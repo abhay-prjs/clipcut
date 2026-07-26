@@ -106,6 +106,13 @@ function _startRVFC() {
 let _seekTarget = null, _seekTargetSetAt = 0;
 function _jumpTo(t){ _seekTarget = t; _seekTargetSetAt = performance.now(); video.currentTime = t; }
 
+// Segment-boundary jump threshold, scaled to the real source fps. At 24fps a
+// frame is 0.042s — a fixed 0.05s threshold sometimes includes and sometimes
+// drops the last frame of a segment depending on frame phase, reading as
+// inconsistent cut timing. One full frame (or 0.05s, whichever is larger)
+// keeps the boundary check aligned to actual frame boundaries.
+function _boundaryThresh(){ return Math.max(0.05, 1/(S.fps||30)); }
+
 function _onVideoFrame(now, metadata) {
   // Re-register first so the loop continues without gaps
   _rVFCHandle = video.requestVideoFrameCallback(_onVideoFrame);
@@ -145,7 +152,7 @@ function _onVideoFrame(now, metadata) {
       S.currentSegmentIdx = Math.max(0, idx === -1 ? 0 : idx);
       curSeg = S.playSegments[S.currentSegmentIdx];
     }
-    if(curSeg && t >= curSeg.end - 0.05){
+    if(curSeg && t >= curSeg.end - _boundaryThresh()){
       if(S.currentSegmentIdx < S.playSegments.length - 1){
         S.currentSegmentIdx++;
         _jumpTo(S.playSegments[S.currentSegmentIdx].start);
