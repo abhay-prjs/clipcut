@@ -440,6 +440,7 @@ is currently showing gap-hatched cuts pre-snap.
 - `setProvider(p)` — switches AI provider between 'openrouter' and 'ollama'
 - `fetchOllamaModels()` — discovers installed Ollama models via /api/tags
 - `fetchOpenRouterModels()` — fetches free models from OpenRouter API
+- `runTier2EditReview()` — Tier-2 AI edit review (Part F2): sends the *planned* edit (kept-segment durations, the full cut list with type/selected/reason, script-transcript diff if a script was pasted) and asks for review only — pacing verdict, hook check, meaning-changing cuts, wrong-retake-kept — never new cut detection. Reuses `_aiScriptFetch()` for provider routing/retry and the chat panel's existing `_parseActionBlocks()`/`appendChatMsg()` action-card UI for any concrete fixes the model suggests, so "approve/reject per suggestion" needed no new UI. Gated behind Deep Mode's new `S.settings.deepEditReview` (opt-in, default off — extra model call on top of `deepAI`) in `runAutoMode(true)`, and separately triggerable via the AI Tools tab's "✦ Tier-2 Edit Review" button
 
 **js/media/import.js**
 - `loadClip(file)` — loads a File object into the editor
@@ -597,8 +598,8 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 **Media tab:** slim import button, Auto/Deep buttons, 📦 Process All (Batch) button (`openBatchModal()`, see `js/media/batch.js`), clip library grid (2-col thumbnails)
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
 **Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only), Edit Check (🔍 Check Edit → `runEditLint()`, see `js/detection/linter.js`) directly above Apply Selected Cuts
-**AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
-**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · UGC Templates (`js/ui/templates.js` — save/apply/delete named presets) · Reset to Defaults
+**AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, Tier-2 Edit Review (`runTier2EditReview()`), findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
+**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, Tier-2 edit review, MediaPipe pass) · UGC Templates (`js/ui/templates.js` — save/apply/delete named presets) · Reset to Defaults
 
 ## Auto Mode & Deep AI Mode
 `runAutoMode(deep)` in `js/detection/silence.js` — all steps gated by `S.settings` flags:
@@ -613,6 +614,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 | Filler words | `autoFillers` | ✓ | ✓ |
 | AI script analysis | `deepAI` | ✗ | ✓ |
 | MediaPipe visual pass (Deep) | `deepMediapipe` | ✗ | ✓ (only if `useMediapipe` also on) |
+| Tier-2 AI edit review | `deepEditReview` | ✗ | ✓ (opt-in, default off — runs after `deepAI` so it reviews AI-suggested cuts too) |
 
 - `detectDeadSpaces()` inside Auto/Deep respects `S.settings.useVAD`, `S.settings.useMediapipe`, and `S.settings.combineMode`
 - WhisperX retake cuts absorbed during transcription step only if `S.settings.detectRetakes` is on

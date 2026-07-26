@@ -955,6 +955,83 @@ Return findings JSON.`;
   }
 }
 
+// ═══════════════════════════════════════
+// TIER-2 AI EDIT REVIEW (Part F2) — review, not detection
+// ═══════════════════════════════════════
+// Tier 1 (js/detection/linter.js) is deterministic and always available.
+// This is the LLM cross-check: reviews the PLANNED edit (segments already
+// applied + cuts still pending) for pacing/hook strength/meaning-changing
+// cuts/wrong-retake-kept, gated behind Deep Mode since it's an extra model
+// call on top of runAIScriptAnalysis(). Reuses the exact ACTION-block
+// vocabulary + card UI the chat panel already has (_parseActionBlocks,
+// appendChatMsg) — "review mode: approve/reject per suggestion" falls out
+// of that for free, no new UI needed.
+async function runTier2EditReview(){
+  if(S.aiProvider==='openrouter' && (!S.orKey || !S.selectedModel)){ toast('⚠ Tier-2 review needs an OpenRouter key + model selected'); return; }
+  if(S.aiProvider==='ollama' && !S.ollamaModel){ toast('⚠ Tier-2 review needs an Ollama model selected'); return; }
+  if(!S.segments.length && !S.cuts.length){ toast('Nothing to review yet — detect or apply some cuts first'); return; }
+
+  const segSummary = S.segments.length
+    ? S.segments.map((s,i)=>`Segment ${i+1}: ${s.duration.toFixed(1)}s kept (source ${s.sourceStart.toFixed(2)}s–${s.sourceEnd.toFixed(2)}s)`).join('\n')
+    : '(no cuts applied yet — reviewing pending cuts against the full clip)';
+  const cutSummary = S.cuts.length
+    ? S.cuts.map(c=>`[${c.selected?'SELECTED':'pending'}] ${c.type} ${c.start.toFixed(2)}s–${c.end.toFixed(2)}s${c.aiNote?` — ${c.aiNote}`:''}${c.text?` ("${c.text}")`:''}`).join('\n')
+    : '(no cuts detected)';
+
+  const script = document.getElementById('scriptInput')?.value?.trim();
+  let diffBlock = '';
+  if(script && S.captions.length){
+    const diffBlocks = _buildScriptDiff(script, S.captions);
+    diffBlock = `\n\nSCRIPT-TRANSCRIPT DIFF:\n${_formatDiffForPrompt(diffBlocks)}`;
+  }
+
+  const keptDur = S.segments.reduce((a,s)=>a+s.duration,0);
+  const prompt = `You are reviewing a PLANNED EDIT for a talking-head video before it's applied — you are NOT detecting new cuts, you are critiquing the ones already found. Answer these four things, briefly:
+1. Pacing verdict — does this read as too choppy, too slow, or about right?
+2. Hook check — is the first 3 seconds of KEPT footage strong? If weak, say what's wrong.
+3. Any cuts that risk changing the meaning of what was said — name the specific cut (by its time range) and why.
+4. Any retakes where the WRONG occurrence looks kept (earlier vs later) — name the specific time range.
+
+If you want to suggest a concrete fix, output ACTION blocks in the exact same format the chat assistant uses — these render as clickable Apply buttons so the user approves or ignores each one individually, nothing here applies automatically:
+
+ACTION: <action>
+START: 0.00
+END: 0.00
+REASON: <brief reason>
+
+Available actions: add_cut, add_highlight, seek, trim_before, trim_after, split, select_cut, deselect_cut, add_marker, delete_cut, select_type, deselect_type (TYPE: dead_air|filler|retake|weak|silence|highlight).
+Use ONLY timestamps that appear below — never invent times. Don't restate the whole edit; focus on what's actually questionable. Be concise.
+
+---
+SEGMENTS (kept footage, in order):
+${segSummary}
+
+DETECTED CUTS (selected = will be removed on next Apply Cuts):
+${cutSummary}${diffBlock}
+
+Duration: ${(S.duration||0).toFixed(1)}s total, ${keptDur.toFixed(1)}s kept after currently-selected cuts.`;
+
+  if(!checkTokenLimit(prompt)) return;
+
+  toast('✦ Running Tier-2 AI edit review...');
+  try{
+    const data = await _aiScriptFetch({
+      model: S.selectedModel?.id || S.orModel || S.ollamaModel,
+      max_tokens: 1200,
+      messages: [{role:'user', content: prompt}],
+    });
+    const reply = data.choices?.[0]?.message?.content || '';
+    if(!reply) throw new Error('Model returned empty response');
+
+    if(document.getElementById('chatPanel')?.style.display !== 'flex') toggleChatPanel();
+    appendChatMsg('ai', `**Tier-2 Edit Review**\n\n${reply}`);
+    S.chatHistory.push({role:'assistant', content: reply});
+    toast('✓ Tier-2 review ready — see AI Chat panel');
+  } catch(e){
+    toast(`✕ Tier-2 review failed: ${e.message.split('\n')[0]}`);
+  }
+}
+
 async function runAIAnalysis(){
   if(!S.current){toast('No video loaded');return;}
 

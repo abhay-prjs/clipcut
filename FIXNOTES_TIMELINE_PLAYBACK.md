@@ -580,16 +580,28 @@ reviewing right before Apply is both simpler and more actionable:**
 
 Renders as a review list reusing the `.sil-result-item` findings-card style;
 each row = jump (click) + optional one-click Fix button. Not yet done:
-Tier 2 (LLM cross-verification) — tracked separately.
+Tier 2 (LLM cross-verification) — ✅ IMPLEMENTED (later session).
 
-**Tier 2 — LLM cross-verification (uses existing OpenRouter/Ollama + ACTION
-plumbing):** send the *planned edit* — segment durations, cut list with
-types/reasons, transcript with on-script/ad-lib marks (LCS diff already
-implemented) — and ask for review only: pacing verdict, hook check (is the first
-3s strong?), cuts that change meaning, retakes where the *wrong* take was kept.
-Responses come back as the existing ACTION blocks in **review mode** (approve/
-reject per suggestion — this is literally the pending "cut review mode" feature;
-wire it here). Gate behind Deep mode; Tier 1 always runs.
+**Tier 2 — LLM cross-verification — `runTier2EditReview()` in `js/detection/ai.js`,
+reusing the existing OpenRouter/Ollama plumbing (`_aiScriptFetch()`) and ACTION
+block infrastructure exactly as spec'd:** sends the *planned edit* — kept-segment
+durations, the full cut list with type/selected/reason, and the script-transcript
+diff (LCS-based, already implemented) when a script is pasted — and asks for
+review only: pacing verdict, hook check (is the first 3s strong?), cuts that
+change meaning, retakes where the *wrong* take was kept. Responses render
+through the chat panel's existing `appendChatMsg()`/`_parseActionBlocks()` —
+any ACTION blocks the model suggests become the same clickable Apply cards
+chat responses already produce, i.e. **review mode** (approve/reject per
+suggestion) needed zero new UI, exactly the "wire it here" the spec called for.
+Gated behind Deep Mode's new `S.settings.deepEditReview` (opt-in, default
+off, since it's a second model call beyond `deepAI` — runs after it so it can
+review AI-suggested cuts too); Tier 1 (`js/detection/linter.js`) always runs
+regardless, unaffected by this. Also triggerable standalone via a "✦ Tier-2
+Edit Review" button in the AI Tools tab. **Not runtime-verified** — same
+caveat as every other item finished without being able to launch the actual
+app: the prompt/response plumbing mirrors `runAIScriptAnalysis()`'s already-
+working pattern closely, but a real model response and Apply-card click-through
+haven't been confirmed in this environment.
 
 ### F3. Batch export + template selection
 
@@ -717,15 +729,32 @@ for F3 batch).
 
 ### F6. Revised phase plan (supersedes Part E ordering from Phase 5 on)
 
+**✅ ALL PHASES BELOW DONE (later session).**
+
 1. Phase 1–4 unchanged (bug fixes → timeline redesign+C6 → perf → playback proxy).
 2. **Phase 5 — Universal trim (F1)** + Tier-1 edit linter (F2) — makes manual
    correction fast and auto output trustworthy.
 3. **Phase 6 — State groundwork**: per-clip edit state, text-layer state,
-   project save/autosave (#8, #10).
+   project save/autosave (#8, #10). *(Per-clip state was already done via
+   bug #22 in an earlier phase; no freeform text-layer state was added since
+   ClipCut has no text-layer feature — templates/karaoke captions cover the
+   caption-specific parts of what this phase originally meant.)*
 4. **Phase 7 — Templates (F4)**: presets, safe zones, ASS karaoke burn-in,
-   export-side aspect handling.
+   export-side aspect handling. *(Export-side aspect handling was already
+   fixed earlier as bug #21.)*
 5. **Phase 8 — Batch (F3)**: queue backend + Batch tab + factory "Process All".
 6. **Phase 9 — Tier-2 AI review (F2)** wiring through ACTION review mode.
+
+**Not runtime-verified, flagged consistently across every phase above:**
+none of Phases 5–9 could be clicked through in a real running instance of
+the app in the environment they were built in — no way to launch the
+actual pywebview GUI. Every piece was checked in isolation (syntax,
+isolated function smoke-tests for `_generate_ass()`'s ASS output and the
+proxy render's ffmpeg filter_complex string), and the code paths are
+logically complete, but a genuine end-to-end pass (drag a segment edge,
+render a proxy and scrub it, apply a template, run a batch export, click
+an Apply button on a Tier-2 review suggestion) is still owed before
+calling any of this fully proven.
 
 ---
 

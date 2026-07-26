@@ -14,6 +14,7 @@ const SETTINGS_DEFAULTS = {
   autoDeadSpaces:  true,
   autoFillers:     true,
   deepAI:          true,
+  deepEditReview:  false,
   detectRetakes:   true,
 };
 
@@ -54,6 +55,7 @@ function toggleSetting(key){
     autoTranscribe: 'autoTranscribeChk', autoWaveform: 'autoWaveformChk',
     autoSilence: 'autoSilenceChk',       autoDeadSpaces: 'autoDeadSpacesChk',
     autoFillers: 'autoFillersChk',       deepAI: 'deepAIChk',
+    deepEditReview: 'deepEditReviewChk',
     detectRetakes: 'detectRetakesChk',
   };
   if(chk[key]){
@@ -163,6 +165,7 @@ function updateSettingsUI(){
 
   // Deep AI checkboxes
   _setChk('deepAIChk',         S.settings.deepAI);
+  _setChk('deepEditReviewChk', S.settings.deepEditReview);
 
   // Transcription
   _setChk('detectRetakesChk',  S.settings.detectRetakes);

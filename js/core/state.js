@@ -78,6 +78,7 @@ const S = {
     autoFillers:     true,
     // Deep AI Mode extras (on top of Auto Mode)
     deepAI:          true,
+    deepEditReview:  false,  // Tier-2 AI edit review (Part F2) — extra model call beyond deepAI, opt-in
     // Transcription
     detectRetakes:   true,   // absorb WhisperX retake cuts into S.cuts after transcription
   },

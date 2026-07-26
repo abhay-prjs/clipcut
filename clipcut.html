@@ -229,6 +229,9 @@
         <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);margin-top:4px" id="fillerStats"></div>
       </div>
       <div class="panel-section">
+        <button class="act-btn ai" onclick="runTier2EditReview()" title="Reviews the planned edit — pacing, hook strength, meaning-changing cuts, wrong retake kept. Sends suggestions to the AI Chat panel as approve/reject action cards.">✦ Tier-2 Edit Review</button>
+      </div>
+      <div class="panel-section">
         <div class="panel-label">Findings</div>
         <div id="fillerList"><div class="empty-state">Run analysis first</div></div>
       </div>
@@ -588,6 +591,10 @@
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
           <span style="font-size:10px;color:var(--text)">AI script analysis</span>
           <input type="checkbox" id="deepAIChk" checked onchange="toggleSetting('deepAI')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" title="Reviews the planned edit (pacing, hook strength, meaning-changing cuts, wrong retake kept) — an extra AI call on top of script analysis, opt-in">
+          <span style="font-size:10px;color:var(--text)">Tier-2 edit review</span>
+          <input type="checkbox" id="deepEditReviewChk" onchange="toggleSetting('deepEditReview')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
         </label>
       </div>
     </div>

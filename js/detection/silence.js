@@ -532,6 +532,15 @@ async function runAutoMode(deep=false){
           await runAIScriptAnalysis();
         }
       }
+      if(st.deepEditReview){
+        // Tier-2 review of the planned edit (Part F2) — runs after script
+        // analysis so it reviews the AI-suggested cuts too, not just the
+        // deterministic ones. runTier2EditReview() does its own readiness
+        // checks/toasts, so no duplicate guard needed here.
+        btn.textContent=`⏳ Step ${step++}: Edit review...`;
+        toast(`⚡ Deep Mode — Tier-2 edit review...`);
+        await runTier2EditReview();
+      }
     }
     });
 
