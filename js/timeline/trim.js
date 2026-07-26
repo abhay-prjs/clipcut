@@ -30,9 +30,12 @@ function updateTrimUI(){
     document.getElementById('trimOutLbl').textContent=(S.trimOut||dur).toFixed(1)+'s';
   }
 }
-function updateTrimPlayhead(){
+// overrideSrcTime: see updateCaptionOverlay() in captions.js — proxy playback
+// passes the mapped source time explicitly.
+function updateTrimPlayhead(overrideSrcTime){
   if(!S.duration)return;
-  const p=(video.currentTime/S.duration)*100;
+  const t=overrideSrcTime!==undefined?overrideSrcTime:video.currentTime;
+  const p=(t/S.duration)*100;
   document.getElementById('trimPlayPos').style.left=p+'%';
 }
 

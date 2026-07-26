@@ -450,7 +450,7 @@ zoom breakpoint — no scenario to clamp).
   testing, not a blind pass — do as its own dedicated task if a long clip is
   still measurably slow after everything above.
 
-**Phase 4 — playback (tuning: hours · proxy: 2–3 days)** — tuning ✅ DONE (commits f819559, 91eeb7c); proxy render not started.
+**Phase 4 — playback (tuning: hours · proxy: 2–3 days)** — ✅ DONE (commits f819559, 91eeb7c, plus proxy render in a later session).
 A2-Option-1 tuning fixes, then the **preview proxy render** (Option 3). Add
 `timelineToSourceTime()` inverse mapper as part of this (already added in
 Phase 2's §C6 work, commit 0cef490).
@@ -459,10 +459,25 @@ Phase 2's §C6 work, commit 0cef490).
 boundary threshold (`max(0.05, 1/fps)`), real fps probing via ffprobe at
 import (also fixes bug #12). `skipTime()` clamping (bug #16) and the trim-bar
 undo fix (bug #20) were already done in earlier phases.
-*Not started:* the preview proxy render itself — a genuinely separate,
-larger feature (background nvenc render, `proxyDirty` state, PROXY/LIVE UI
-pill, bypass-playSegments-while-proxy-active logic). Worth scoping as its
-own task rather than folding into this pass.
+
+*Preview proxy render — ✅ IMPLEMENTED (later session).* `render_preview_proxy()`
+(serve.py) background-renders the kept segments only at nvenc p1/CQ32,
+downscaled to 1280px wide, concatenated gaplessly — not the final export,
+purely for editing feel. `#proxyBtn` (LIVE/PROXY toggle) in the playback bar
+triggers it; while active, `S.proxyActive` makes the rVFC loop skip all
+segment-boundary/skip-cut jump logic entirely (nothing to skip — the file
+has no gaps) and just syncs UI via source-time mapping
+(`_sourceToProxyTime`/`_proxyToSourceTime`, built on `gaplessSegmentMeta()`
+from the gap-hatching work). `S.proxyDirty` invalidates on any
+`buildPlaySegments()` call (segment/cut change); switching clips or
+undo/redo resets proxy state outright rather than leaving it stale.
+**Not done, flagged:** no Cancel button for an in-progress render (unlike
+export's `cancel_export()`); this has not been runtime-verified end-to-end
+(render → gapless scrub → swap back) since there's no way to launch the
+actual pywebview GUI and click through it in the environment this was
+built in — the code paths are logically complete and each piece
+(mapping functions, rVFC bypass, ffmpeg command construction) was checked
+in isolation, but a real click-through pass is still owed.
 
 **Phase 5 — durability & headline features** ✅ bugs #6/#8/#10(partial)/#21/#22 DONE — commits de41ea6..d5b79b5.
 #8 project save/autosave → #10 text-style state → templates → drag-in-preview →

@@ -19,6 +19,12 @@ const S = {
   snapped: false,        // whether gaps are closed
   playSegments: [],      // [{start,end,timelineStart}] — active play queue
   currentSegmentIdx: 0,  // index into playSegments during playback
+  // Preview proxy (Part A3 Option 3) — a background-rendered gapless concat
+  // of kept segments, swapped into video.src for perfectly gapless
+  // scrub-anywhere playback. See js/playback/playback.js's proxy section.
+  proxyUrl: null,        // http://localhost:8080/video?path=... once rendered
+  proxyActive: false,    // true while video.src IS the proxy
+  proxyDirty: true,      // true if segments/cuts changed since last render
   silenceVisible: true,
   zoom: 60,
   tool: 'select',

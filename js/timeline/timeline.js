@@ -290,8 +290,10 @@ tArea.addEventListener('scroll',()=>{
   });
 });
 
-function updatePlayhead(){
-  const x=getPlayheadPosition();
+// overrideSrcTime: see updateCaptionOverlay() — proxy playback passes the
+// mapped source time explicitly since video.currentTime is proxy-space there.
+function updatePlayhead(overrideSrcTime){
+  const x=getPlayheadPosition(overrideSrcTime);
   ph.style.left=x+'px';
   if(x>tArea.scrollLeft+tArea.clientWidth-60) tArea.scrollLeft=x-80;
 }
@@ -338,8 +340,18 @@ function handleTLClick(e){
     }
   }
 
-  if(video.src && srcTime >= 0)
-    video.currentTime = clamp(srcTime, S.trimIn, S.trimOut || S.duration);
+  if(video.src && srcTime >= 0){
+    const clampedSrc = clamp(srcTime, S.trimIn, S.trimOut || S.duration);
+    // Proxy playback needs the source timestamp mapped into the proxy file's
+    // own (gapless) time — video.currentTime there is proxy-space, not
+    // source-space (see the PREVIEW PROXY section in playback.js).
+    if(S.proxyActive){
+      const proxyTime = _sourceToProxyTime(clampedSrc);
+      if(proxyTime !== null) video.currentTime = proxyTime;
+    } else {
+      video.currentTime = clampedSrc;
+    }
+  }
 }
 
 tArea.addEventListener('click',e=>{

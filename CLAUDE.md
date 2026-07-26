@@ -203,6 +203,7 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `_compute_output_dims(source_path, aspect, aspect_mode)` / `_probe_dimensions(source_path)` — ffprobes source resolution and replicates `_aspect_filter()`'s crop/pad math to get the actual exported frame size (needed for ASS `PlayResX/Y`)
 - `_hex_to_ass_color()` / `_parse_bg_color()` — CSS hex/rgba → ASS `&HAABBGGRR` color string conversion (note ASS reverses RGB byte order and inverts alpha vs CSS)
 - `cancel_export()` → sets `_export_cancelled = True`
+- `render_preview_proxy(source_path, segments_json)` → background nvenc render (p1, CQ32, downscaled to 1280px wide) of the kept segments only, concatenated gaplessly — not the final export, purely for the gapless scrub-anywhere preview proxy (see `js/playback/playback.js`'s PREVIEW PROXY section). Returns `{success, path, duration}`. Reuses `_run_ffmpeg()`'s progress reporting via the new `progress_fn` param (`_push_progress(pct, js_fn=...)`), routed to `_onProxyProgress(pct)` instead of the export modal's `setProgress(pct,label)`. Deletes the previous proxy temp file (`_last_proxy_path`) before rendering a new one — no cancel button in v1, unlike `cancel_export()`
 - `log_js(level, msg)` → routes JS logs to terminal with `[HH:MM:SS] [JS/LEVEL]` prefix
 
 ### HTTP server `/video` endpoint
@@ -268,6 +269,9 @@ S.cuts             // ALL detected issues [{id, start, end, type, selected, skip
 S.playSegments     // derived from S.segments for virtual playback
 S.currentSegmentIdx // which segment is playing
 S.skipCuts         // boolean — whether playback skips cuts (default true)
+S.proxyUrl         // preview proxy HTTP URL once rendered, else null
+S.proxyActive      // true while video.src IS the proxy (video.currentTime is proxy-space, not source-space)
+S.proxyDirty       // true if segments/cuts changed since the proxy was rendered — set by buildPlaySegments()
 S.captions         // word-level caption array [{id, text, start, end}]
 S.waveformData     // {frames, dur, sr} from Web Audio API
 S.markers          // manual timeline markers
@@ -448,11 +452,21 @@ is currently showing gap-hatched cuts pre-snap.
 - `exportFrame()` — exports current frame as PNG
 
 **js/playback/playback.js**
-- `togglePlay()`, `skipTime()`, `setSpeed()`, `setVolume()`
-- `buildPlaySegments()` — derives S.playSegments from S.segments for virtual playback
-- `getPlayheadPosition()` — returns pixel position of playhead on timeline
+- `togglePlay()`, `skipTime()`, `setSpeed()`, `setVolume()` — all branch on `S.proxyActive` early (proxy has no gaps to route skip/restart logic around)
+- `buildPlaySegments()` — derives S.playSegments from S.segments for virtual playback. Also sets `S.proxyDirty=true` — anything that reaches this function changed segments/cuts, so an existing rendered proxy no longer matches
+- `getPlayheadPosition(overrideSrcTime)` — returns pixel position of playhead on timeline. `overrideSrcTime` is used during proxy playback (see below) since `video.currentTime` there is proxy-space, not source-space — omit for normal virtual playback
 - `sourceTimeToTimeline(t)` — maps source timestamp to timeline position; returns null if inside a cut
+- `gaplessSegmentMeta()` — S.segments-shaped data with a contiguous cursor layout, independent of the live `S.snapped` state; both export caption-sync and the preview proxy's source↔proxy time mapping use this instead of trusting `S.segments[].timelineStart` directly (see the Segment Object Shape section above)
 - `tc(t)`, `fmt(t)`, `clamp(v,mn,mx)` — utility functions used across all modules
+
+**js/playback/playback.js — PREVIEW PROXY (Part A3 Option 3)**
+- `renderPreviewProxy()` — calls `pywebview.api.render_preview_proxy()` with the kept segments (source time), shows progress via `_onProxyProgress(pct)` on the `#proxyBtn` label, then `_enterProxyMode()` on success
+- `_sourceToProxyTime(t)` / `_proxyToSourceTime(t)` — map between source-file time and the proxy's own (gapless) time, using `gaplessSegmentMeta()`'s cursor layout — the same layout the rendered proxy file actually has, regardless of the live `S.snapped` display state
+- `_enterProxyMode()` / `_exitProxyMode()` — swap `video.src` between the proxy and the live source file, preserving playhead position across the swap via the mapping functions above
+- `toggleProxyMode()` — the `#proxyBtn` click handler: exits if active, re-enters an existing non-dirty proxy without re-rendering, otherwise triggers a fresh render
+- The rVFC loop (`_onVideoFrame`/`_onVideoFrameFallback`) branches on `S.proxyActive` at the very top — when true, skips all segment-boundary/skip-cut jump logic entirely (the proxy file has no gaps to skip) and just syncs UI, passing `_proxyToSourceTime(t)` as the `overrideSrcTime` to `updateTimecode()`/`updatePlayhead()`/`updateCaptionOverlay()`/`updateTrimPlayhead()`/`updateTranscriptHighlight()` so caption/segment lookups (keyed by source time) still resolve correctly
+- `selectClip()` (import.js) and `_applySnapshot()` (history.js, undo/redo) both reset all three proxy state fields — the rendered proxy belongs to whichever clip/edit-state was active when it was made, so switching clips or undoing invalidates it outright rather than leaving a stale PROXY/LIVE state pointing at the wrong file
+- **Known limitation, not done in v1:** no Cancel button for an in-progress proxy render (unlike `cancel_export()`); no automatic proxy re-render on dirty, the user re-triggers via the button
 
 **js/timeline/trim.js**
 - `updateTrimUI()` — updates trim bar display (handles cut-mode vs clip-mode)
@@ -558,7 +572,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
   - **Captions** tab: full caption style block (font/weight/layout/size/color/stroke/position)
   - **Export**: the persistent footer block was removed (2026-07-26) — it duplicated the topbar Export button (Export Video) and the left-panel Captions tab's SRT/VTT buttons, and appeared under every insp-tab regardless of which was active, reading as if export lived in every tab. Export is now reached only via the topbar `⬆ Export` button → `#exportModal` (format/preset/burn-captions/aspect options). SRT/VTT export stays in the left-panel Captions tab only. Snapshot Frame moved into the Video insp-tab (still calls `exportFrame()`).
 - **Timeline toolbar:** flat row of individual pills (Select/Trim/Split/Trim Before/Merge Cuts/Trim After/Silence, then Snap/Snap Gaps) — no longer grouped in a boxed tray
-- **Playback bar:** wrapped in a floating `.pb-pill` capsule instead of a flat full-width strip
+- **Playback bar:** wrapped in a floating `.pb-pill` capsule instead of a flat full-width strip. `#proxyBtn` (LIVE/PROXY toggle, `toggleProxyMode()`) sits right after Skip Cuts — see the PREVIEW PROXY section under js/playback/playback.js above
 - **Export modal:** Save folder row removed (native Save dialog handles folder+filename)
 
 ## Tab Structure — Left Panel (icon rail)

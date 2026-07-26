@@ -518,6 +518,7 @@ class API:
     """All Python functionality exposed to JS via window.pywebview.api.*"""
 
     _export_cancelled = False
+    _last_proxy_path  = None  # previous render_preview_proxy() output — deleted before the next render
 
     # ── File dialogs ──────────────────────────────────────────────────────────
 
@@ -1248,7 +1249,17 @@ class API:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    def _push_progress(self, pct, label=None):
+    def _push_progress(self, pct, label=None, js_fn='setProgress'):
+        # js_fn lets callers other than the main export path (e.g. the
+        # preview proxy render) route progress to their own JS callback
+        # instead of the export modal's setProgress(pct, label) \u2014 that
+        # callback only takes a bare percentage.
+        if js_fn != 'setProgress':
+            try:
+                webview.windows[0].evaluate_js(f"{js_fn}({pct})")
+            except Exception:
+                pass
+            return
         if label is None:
             label = 'Done!' if pct >= 100 else f'Encoding\u2026 {pct}%'
         safe = label.replace("'", "\\'")
@@ -1257,7 +1268,7 @@ class API:
         except Exception:
             pass
 
-    def _run_ffmpeg(self, cmd, seg_us, pct_start, pct_end):
+    def _run_ffmpeg(self, cmd, seg_us, pct_start, pct_end, progress_fn='setProgress'):
         log('FFMPEG', 'CMD: ' + ' '.join(cmd))
         t0   = time.time()
         proc = subprocess.Popen(
@@ -1283,7 +1294,7 @@ class API:
                 try:
                     frac = min(1.0, int(v) / seg_us)
                     pct  = int(pct_start + frac * (pct_end - pct_start))
-                    self._push_progress(pct)
+                    self._push_progress(pct, js_fn=progress_fn)
                     # Log every 10% milestone
                     if pct // 10 != last_pct // 10:
                         log('FFMPEG', f'  progress: {pct}%  ({time.time()-t0:.1f}s)')
@@ -1291,7 +1302,7 @@ class API:
                 except Exception:
                     pass
             elif k == 'progress' and v == 'end':
-                self._push_progress(pct_end)
+                self._push_progress(pct_end, js_fn=progress_fn)
 
         proc.wait()
         elapsed = time.time() - t0
@@ -1408,6 +1419,82 @@ class API:
             return {'success': True, 'path': save_path}
         log('EXPORT', f'✕ Burnin export failed')
         return {'success': False, 'error': err}
+
+    # ── Preview proxy (Part A3 Option 3) ────────────────────────────────────
+    # A fast, low-quality background render of the kept segments only,
+    # concatenated gaplessly — swapped into video.src client-side for
+    # perfectly gapless scrub-anywhere playback (bypasses the virtual
+    # playSegments jump-logic entirely, since the file itself has no gaps).
+    # Not the final export: nvenc p1 + CQ32 + downscaled to 1280 wide, purely
+    # for smooth editing feel.
+
+    def render_preview_proxy(self, source_path, segments_json):
+        try:
+            segments = json.loads(segments_json)
+            if not segments:
+                return {'success': False, 'error': 'No segments'}
+
+            # Best-effort cleanup of the previous proxy — otherwise every
+            # render leaves an orphaned temp file behind.
+            if self._last_proxy_path and os.path.exists(self._last_proxy_path):
+                try:
+                    os.unlink(self._last_proxy_path)
+                except Exception:
+                    pass
+
+            out_path  = os.path.join(tempfile.gettempdir(), f'clipcut_proxy_{int(time.time()*1000)}.mp4')
+            total_dur = sum(seg['end'] - seg['start'] for seg in segments)
+            total_us  = int(total_dur * 1_000_000)
+            log('PROXY', f'Rendering — {len(segments)} segment(s), {total_dur:.1f}s total  →  {out_path}')
+
+            prog_flags  = ['-progress', 'pipe:1', '-nostats', '-threads', '0']
+            scale_vf    = "scale='min(1280,iw)':-2"
+
+            if len(segments) == 1:
+                seg = segments[0]
+                dur = round(seg['end'] - seg['start'], 3)
+                base = (['ffmpeg', '-y', '-ss', str(round(seg['start'], 3)), '-t', str(dur),
+                         '-i', source_path] + prog_flags + ['-vf', scale_vf])
+                cmd_gpu = (['ffmpeg', '-y', '-hwaccel', 'auto'] + base[2:] +
+                           ['-c:v', 'h264_nvenc', '-preset', 'p1', '-cq', '32', '-c:a', 'aac', '-b:a', '96k', out_path])
+                cmd_cpu = (base +
+                           ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', '-c:a', 'aac', '-b:a', '96k', out_path])
+            else:
+                fc   = self._make_proxy_filter_complex(segments, scale_vf)
+                base = ['ffmpeg', '-y', '-i', source_path] + prog_flags + ['-filter_complex', fc, '-map', '[outv]', '-map', '[outa]']
+                cmd_gpu = base + ['-c:v', 'h264_nvenc', '-preset', 'p1', '-cq', '32', '-c:a', 'aac', '-b:a', '96k', out_path]
+                cmd_cpu = base + ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', '-c:a', 'aac', '-b:a', '96k', out_path]
+
+            ok, err = self._run_ffmpeg(cmd_gpu, total_us, 0, 100, progress_fn='_onProxyProgress')
+            if not ok and not self._export_cancelled:
+                log('PROXY', '✕ GPU proxy render failed — retrying CPU')
+                ok, err = self._run_ffmpeg(cmd_cpu, total_us, 0, 100, progress_fn='_onProxyProgress')
+
+            if not ok:
+                log('PROXY', f'✕ Proxy render failed: {err[-300:] if err else ""}')
+                return {'success': False, 'error': err[-300:] if err else 'ffmpeg failed'}
+
+            self._last_proxy_path = out_path
+            size_mb = os.path.getsize(out_path) / 1_048_576 if os.path.exists(out_path) else 0
+            log('PROXY', f'✓ Ready  ({size_mb:.1f} MB)')
+            return {'success': True, 'path': out_path, 'duration': total_dur}
+        except Exception as exc:
+            import traceback
+            log('PROXY', f'✕ UNCAUGHT EXCEPTION: {exc}')
+            log('PROXY', traceback.format_exc())
+            return {'success': False, 'error': str(exc)}
+
+    def _make_proxy_filter_complex(self, segments, scale_vf):
+        parts = []
+        for i, seg in enumerate(segments):
+            s, e = round(seg["start"], 3), round(seg["end"], 3)
+            parts.append(f"[0:v]trim=start={s}:end={e},setpts=PTS-STARTPTS[v{i}]")
+            parts.append(f"[0:a]atrim=start={s}:end={e},asetpts=PTS-STARTPTS[a{i}]")
+        n = len(segments)
+        interleaved = "".join(f"[v{i}][a{i}]" for i in range(n))
+        parts.append(f"{interleaved}concat=n={n}:v=1:a=1[cv][outa]")
+        parts.append(f"[cv]{scale_vf}[outv]")
+        return ";".join(parts)
 
 
 # ── Config hot-reload ─────────────────────────────────────────────────────────

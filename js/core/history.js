@@ -76,6 +76,14 @@ function _applySnapshot(snap){
   S.playing = false;
   _setPlayIcon(false);
 
+  // video.src is about to be reset to the source file unconditionally below —
+  // any proxy state from before the undo/redo is now stale (segments/cuts
+  // may have just changed) and doesn't match what's about to play.
+  S.proxyActive = false;
+  S.proxyUrl = null;
+  S.proxyDirty = true;
+  _updateProxyBtn();
+
   if(S.current){
     video.onerror = null;
     video.onloadedmetadata = null;

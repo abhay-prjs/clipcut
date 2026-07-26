@@ -47,6 +47,13 @@ function togglePlay() {
   if(S.playing){
     _pauseVideo();
   } else {
+    if(S.proxyActive){
+      // Proxy is already gapless — no S.playSegments lookup needed, just
+      // restart from 0 if past the end (proxy-space, not source-space).
+      if(video.currentTime >= (video.duration||0) - 0.03) video.currentTime = 0;
+      _playVideo();
+      return;
+    }
     const firstStart = S.playSegments.length ? S.playSegments[0].start : (S.trimIn||0);
     if(video.currentTime >= (S.trimOut||S.duration)){
       // Past end — restart from first segment
@@ -61,6 +68,11 @@ function togglePlay() {
 
 function skipTime(d){
   if(!video.src)return;
+  if(S.proxyActive){
+    // Proxy has no gaps to route around — plain clamp within the file.
+    video.currentTime = clamp(video.currentTime+d, 0, video.duration||99999);
+    return;
+  }
   let target=clamp(video.currentTime+d,S.trimIn,S.trimOut||S.duration);
   if(S.playSegments && S.playSegments.length){
     const inSeg=S.playSegments.some(s=>target>=s.start&&target<=s.end);
@@ -113,6 +125,126 @@ function _jumpTo(t){ _seekTarget = t; _seekTargetSetAt = performance.now(); vide
 // keeps the boundary check aligned to actual frame boundaries.
 function _boundaryThresh(){ return Math.max(0.05, 1/(S.fps||30)); }
 
+// ═══════════════════════════════════════
+// PREVIEW PROXY (Part A3 Option 3) — background-rendered gapless concat of
+// kept segments, swapped into video.src for perfectly gapless scrub-anywhere
+// playback. While active, video.currentTime is in PROXY space (the rendered
+// file's own timeline, always gapless — the same layout gaplessSegmentMeta()
+// already computes for export), not source-file space, so anything reading
+// video.currentTime elsewhere needs the source-time mapping below rather than
+// using it directly.
+// ═══════════════════════════════════════
+
+// source time <-> proxy time, via the same gapless cursor layout export uses.
+function _sourceToProxyTime(srcTime){
+  const meta = gaplessSegmentMeta();
+  for(const seg of meta){
+    if(srcTime >= seg.sourceStart && srcTime <= seg.sourceEnd)
+      return seg.timelineStart + (srcTime - seg.sourceStart);
+  }
+  return null;
+}
+function _proxyToSourceTime(proxyTime){
+  const meta = gaplessSegmentMeta();
+  if(!meta.length) return proxyTime;
+  for(const seg of meta){
+    const segEndTl = seg.timelineStart + (seg.sourceEnd - seg.sourceStart);
+    if(proxyTime >= seg.timelineStart && proxyTime <= segEndTl)
+      return seg.sourceStart + (proxyTime - seg.timelineStart);
+  }
+  const last = meta[meta.length - 1];
+  return proxyTime < meta[0].timelineStart ? meta[0].sourceStart : last.sourceEnd;
+}
+
+function _updateProxyBtn(){
+  const btn = document.getElementById('proxyBtn');
+  const label = document.getElementById('proxyBtnLabel');
+  if(!btn || !label) return;
+  if(S.proxyActive){
+    label.textContent = 'PROXY';
+    btn.classList.add('act');
+    btn.title = 'Playing the rendered gapless proxy — click to switch back to live editing playback';
+  } else {
+    label.textContent = (S.proxyUrl && !S.proxyDirty) ? 'LIVE ●' : 'LIVE';
+    btn.classList.remove('act');
+    btn.title = S.proxyUrl
+      ? (S.proxyDirty ? 'Proxy is stale (segments/cuts changed) — click to re-render' : 'Click to switch to the rendered gapless proxy')
+      : 'Render a gapless preview proxy for smooth scrubbing';
+  }
+}
+
+// Swap into the rendered proxy, preserving playhead position (mapped from
+// source time into the proxy's own gapless time).
+function _enterProxyMode(){
+  if(!S.proxyUrl) return;
+  const proxyTime = _sourceToProxyTime(video.currentTime) ?? 0;
+  _stopRVFC();
+  _pauseVideo();
+  S.proxyActive = true;
+  video.onerror = null;
+  video.src = S.proxyUrl;
+  video.onloadedmetadata = () => { video.currentTime = Math.max(0, proxyTime); };
+  _updateProxyBtn();
+}
+
+// Swap back to the live source file, mapping the proxy's playhead back to a
+// source timestamp so the position is preserved across the switch.
+function _exitProxyMode(){
+  if(!S.current) return;
+  const srcTime = _proxyToSourceTime(video.currentTime) ?? (S.trimIn||0);
+  _stopRVFC();
+  _pauseVideo();
+  S.proxyActive = false;
+  video.onerror = null;
+  video.src = S.current.url;
+  video.onloadedmetadata = () => { video.currentTime = Math.max(0, srcTime); };
+  _updateProxyBtn();
+}
+
+function toggleProxyMode(){
+  if(!S.current){ toast('Load a video first'); return; }
+  if(S.proxyActive){ _exitProxyMode(); return; }
+  if(S.proxyUrl && !S.proxyDirty){ _enterProxyMode(); return; }
+  renderPreviewProxy();
+}
+
+// Called by Python via evaluate_js() during the proxy render
+function _onProxyProgress(pct){
+  const label = document.getElementById('proxyBtnLabel');
+  if(label) label.textContent = `⏳${Math.round(pct)}%`;
+}
+
+async function renderPreviewProxy(){
+  if(!S.current?.sourcePath){ toast('Preview proxy needs a real file path — reload via 📂 Open File, not drag-drop'); return; }
+  if(!window.pywebview){ toast('Preview proxy requires the desktop app'); return; }
+  if(!S.segments.length){ toast('Nothing to render yet'); return; }
+
+  const btn = document.getElementById('proxyBtn');
+  if(btn) btn.disabled = true;
+  _onProxyProgress(0);
+  toast('⚡ Rendering preview proxy...');
+
+  // Same shape as export's fast path — kept segments only, in source time.
+  const segs = S.segments.map(s => ({start: s.sourceStart, end: s.sourceEnd}));
+
+  try{
+    const result = await window.pywebview.api.render_preview_proxy(S.current.sourcePath, JSON.stringify(segs));
+    if(!result || !result.success){
+      toast(`✕ Proxy render failed: ${result?.error || 'unknown error'}`);
+      return;
+    }
+    S.proxyUrl = `${window.location.origin}/video?path=${encodeURIComponent(result.path)}`;
+    S.proxyDirty = false;
+    _enterProxyMode();
+    toast('✓ Preview proxy ready — gapless scrubbing enabled');
+  } catch(e){
+    toast(`✕ Proxy render failed: ${e.message}`);
+  } finally {
+    if(btn) btn.disabled = false;
+    _updateProxyBtn();
+  }
+}
+
 function _onVideoFrame(now, metadata) {
   // Re-register first so the loop continues without gaps
   _rVFCHandle = video.requestVideoFrameCallback(_onVideoFrame);
@@ -121,6 +253,26 @@ function _onVideoFrame(now, metadata) {
 
   // While seeking (programmatic or user scrub) skip all jump logic to prevent oscillation
   if(video.seeking) return;
+
+  // Proxy is a gapless concat of kept segments already — no boundary/skip
+  // logic needed at all, just loop-region + trim-out + UI sync, mapped back
+  // to source time for everything that reads S.captions/S.segments (which
+  // are keyed by source time, not proxy time).
+  if(S.proxyActive){
+    const srcTime = _proxyToSourceTime(t);
+    if(S.looping && S.loopA !== null && S.loopB !== null){
+      const loopBProxy = _sourceToProxyTime(S.loopB);
+      if(loopBProxy !== null && t >= loopBProxy){ _jumpTo(_sourceToProxyTime(S.loopA) ?? 0); return; }
+    }
+    if(video.duration && t >= video.duration - 0.03 && S.playing){ _pauseVideo(); }
+    updateTimecode(srcTime);
+    updatePlayhead(srcTime);
+    updateCaptionOverlay(srcTime);
+    updateTranscriptHighlight(srcTime);
+    updateTrimPlayhead(srcTime);
+    return;
+  }
+
   if(_seekTarget !== null){
     // Give up waiting after 500ms so a seek that never quite lands (clamped
     // target, external interruption) can't permanently freeze the loop.
@@ -184,6 +336,23 @@ function _onVideoFrameFallback() {
   const t = video.currentTime;
   // timeupdate fires during seeking — skip all jump logic to prevent oscillation
   if(video.seeking) return;
+
+  // See the rVFC path's proxy branch above for why this bypasses everything else.
+  if(S.proxyActive){
+    const srcTime = _proxyToSourceTime(t);
+    if(S.looping && S.loopA !== null && S.loopB !== null){
+      const loopBProxy = _sourceToProxyTime(S.loopB);
+      if(loopBProxy !== null && t >= loopBProxy){ video.currentTime = _sourceToProxyTime(S.loopA) ?? 0; return; }
+    }
+    if(video.duration && t >= video.duration - 0.03 && S.playing){ _pauseVideo(); }
+    updateTimecode(srcTime);
+    updatePlayhead(srcTime);
+    updateCaptionOverlay(srcTime);
+    updateTranscriptHighlight(srcTime);
+    updateTrimPlayhead(srcTime);
+    return;
+  }
+
   if(S.looping && S.loopA !== null && S.loopB !== null){
     if(t >= S.loopB){ video.currentTime = S.loopA; return; }
   }
@@ -241,7 +410,13 @@ if(video.requestVideoFrameCallback){
 // ═══════════════════════════════════════
 // TIMECODE + UTILITIES
 // ═══════════════════════════════════════
-function updateTimecode(){document.getElementById('timecodeDisplay').textContent=tc(video.currentTime);}
+// overrideSrcTime: see updateCaptionOverlay() in captions.js — proxy playback
+// passes the mapped source time explicitly since video.currentTime is
+// proxy-space there, not source-file space.
+function updateTimecode(overrideSrcTime){
+  const t=overrideSrcTime!==undefined?overrideSrcTime:video.currentTime;
+  document.getElementById('timecodeDisplay').textContent=tc(t);
+}
 function tc(t){const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=Math.floor(t%60);return[h,m,s].map(n=>String(n).padStart(2,'0')).join(':');}
 function fmt(t){if(!t)return'—';return t>=60?`${Math.floor(t/60)}m${(t%60).toFixed(1)}s`:`${t.toFixed(2)}s`;}
 function clamp(v,mn,mx){return Math.max(mn,Math.min(mx||99999,v));}
@@ -288,6 +463,9 @@ function _deduplicateCuts(cuts){
 // Derives ordered play regions from S.segments (or S.clips as fallback)
 // with selected S.cuts removed.
 function buildPlaySegments(){
+  // Anything that reaches here changed segments/cuts (or a clip/undo swap) —
+  // the rendered proxy no longer matches, if one exists.
+  S.proxyDirty = true;
   const activeCuts = _deduplicateCuts(
     S.cuts.filter(c => c.selected && c.skipEnabled !== false && c.scriptPart !== true && c.type !== 'highlight')
   ).sort((a, b) => a.start - b.start);
@@ -327,12 +505,14 @@ function buildPlaySegments(){
   return S.playSegments;
 }
 
-// Returns the playhead's pixel position on the snapped timeline.
-// Translates raw source time into timeline position using the active segment's timelineStart.
-function getPlayheadPosition(){
-  const tl = sourceTimeToTimeline(video.currentTime);
+// Returns the playhead's pixel position on the (live, possibly gap-hatched)
+// timeline. Translates source time into timeline position using the active
+// segment's timelineStart. overrideSrcTime: see updateCaptionOverlay().
+function getPlayheadPosition(overrideSrcTime){
+  const srcTime = overrideSrcTime!==undefined?overrideSrcTime:video.currentTime;
+  const tl = sourceTimeToTimeline(srcTime);
   if(tl !== null) return tl * S.zoom;
-  return video.currentTime * S.zoom;
+  return srcTime * S.zoom;
 }
 
 // Returns S.segments-shaped {sourceStart,sourceEnd,timelineStart} laid out

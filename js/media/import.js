@@ -162,6 +162,13 @@ function selectClip(id) {
     S.current.trimOut = S.trimOut;
   }
 
+  // The rendered proxy belongs to whichever clip was active when it was
+  // made — switching clips invalidates it outright rather than leaving a
+  // stale "LIVE ●"/PROXY state pointing at the wrong source file.
+  if(S.proxyActive){ _stopRVFC(); S.proxyActive=false; }
+  S.proxyUrl=null; S.proxyDirty=true;
+  _updateProxyBtn();
+
   S.current      = c;
   S.selectedClipId = id;
   S.selectedFindingId = null;

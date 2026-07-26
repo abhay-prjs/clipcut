@@ -460,8 +460,11 @@ function _applyTextStyle(){
   el.style.transform=`translateX(-50%) scale(${ts.posZ})`;
 }
 
-function updateCaptionOverlay(){
-  const t=video.currentTime;
+// overrideSrcTime: pass the mapped SOURCE time explicitly during proxy
+// playback, where video.currentTime is the proxy file's own (gapless) time,
+// not a source timestamp — omit for normal virtual playback.
+function updateCaptionOverlay(overrideSrcTime){
+  const t=overrideSrcTime!==undefined?overrideSrcTime:video.currentTime;
   const c=S.captions.find(x=>t>=x.start&&t<=x.end);
   const el=document.getElementById('captionOverlay');
   _applyTextStyle();
