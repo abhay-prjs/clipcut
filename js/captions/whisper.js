@@ -82,7 +82,12 @@ async function transcribeWithWhisper(){
       const end = isLast
         ? Math.max(_snapToFrame(chunk[chunk.length - 1].end, fps), start + 0.001)
         : Math.max(starts[i + 1], start + 0.001);
-      return { id: i, text: chunk.map(w => w.text).join(' '), start, end };
+      // Per-word timestamps, kept alongside the chunked text — used by
+      // word-highlight (karaoke) ASS export (_generate_ass in serve.py).
+      // Not re-derived on manual edit/split (_startEditWord in captions.js);
+      // those paths clear .words since the text no longer matches 1:1.
+      const words = chunk.map(w => ({ text: w.text, start: w.start, end: w.end }));
+      return { id: i, text: chunk.map(w => w.text).join(' '), start, end, words };
     });
 
     saveHistory();

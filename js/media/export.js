@@ -120,7 +120,8 @@ async function _doPywebviewExport(){
       // _generate_ass() (serve.py) scale font/stroke proportionally from
       // "px in the preview box" to "px in the actual exported frame"
       _exportBurnCap ? JSON.stringify(S.textStyle) : '{}',
-      _exportBurnCap ? (video.clientHeight||0) : 0
+      _exportBurnCap ? (video.clientHeight||0) : 0,
+      S.captionMode
     );
 
     if(!result || result.error === 'cancelled') {

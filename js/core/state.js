@@ -43,6 +43,8 @@ const S = {
   wordsPerCap: 2,
   stripPunct: true,
   captionLayout: 'single',
+  captionMode: 'static',  // 'static' | 'word-highlight' (karaoke) — export burn-in only, see setCaptionMode()
+  safeZonesVisible: false, // platform UI safe-zone guide overlay (9:16 only) — see toggleSafeZones()
   // Caption overlay styling — source of truth (bug #10). Previously these
   // lived only as inline styles on #captionOverlay: not undoable, not
   // persisted, and (still, pending the ASS burn-in pipeline) not passed to

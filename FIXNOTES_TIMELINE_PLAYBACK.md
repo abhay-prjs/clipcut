@@ -615,6 +615,46 @@ this is where ClipCut can be *better* for UGC.
 
 ### F4. Templates — expanded to full UGC presets
 
+**✅ IMPLEMENTED (later session)**, scoped down from the spec below in one
+deliberate way: no `textLayers` slot system (hook/captions with independent
+anchors) — ClipCut has no freeform text-layer feature at all to apply that
+to, so templates bundle what actually exists instead: aspect/aspectMode,
+`S.textStyle` (font/size/color/stroke/background/position),
+`S.captionLayout`, `S.captionMode` (static/word-highlight), export preset,
+and a subset of `S.settings` (the auto-detection toggles). CRUD lives in
+`js/ui/templates.js` + `list_templates()`/`save_template()`/
+`delete_template()` in serve.py, stored in `templates.json` next to
+config.json. UI: Settings tab → "UGC Templates" (select/Apply/Delete +
+name input/"Save Current").
+
+Both other pieces of this section **are also done**:
+- **Platform safe zones**: `#safeZoneBtn` next to the aspect badges toggles
+  `.safe-zone-overlay` (dashed guide lines at top 10%/bottom 18%/sides 12% —
+  approximate, not pulled from a platform API) over the preview box.
+  9:16-only by design (`_updateSafeZoneOverlay()` in ui.js hides it for any
+  other aspect) since that's the only aspect these platform UI overlays
+  actually apply to. Guide-only — doesn't auto-place anything into the safe
+  area (no text-layer system to place).
+- **Word-highlight captions (ASS karaoke)**: `S.captions[].words` (per-word
+  timestamps, added in whisper.js at transcription time) feeds
+  `_generate_ass(..., caption_mode='word-highlight')` in serve.py, which
+  emits `\k`-tagged karaoke text per caption instead of static text — libass
+  progressively swaps each word from a dim SecondaryColour to the user's
+  chosen PrimaryColour as playback reaches it. Toggle: Captions tab → Export
+  Mode → Static/Word Highlight (`setCaptionMode()`). **Scope note:** export
+  burn-in only — the live browser preview overlay does not do per-word
+  highlight animation (that's a separate, not-yet-built feature); a caption
+  with no `.words` (manually edited/split in the transcript editor, which
+  clears it since the text no longer matches 1:1) falls back to static
+  rendering for that one caption rather than failing.
+- **Not runtime-verified**: same caveat as the preview proxy render — no way
+  to launch the actual pywebview GUI in this environment to click through
+  Apply Template / toggle Safe Zones / render a word-highlight export and
+  confirm the ASS karaoke actually looks right in a real player. Code paths
+  and the ASS output format were checked in isolation (a standalone
+  `_generate_ass()` smoke test with `caption_mode='word-highlight'` produced
+  well-formed `{\k70}hello {\k75}world`-style output), not end-to-end.
+
 Upgrade the audit-v1 template (caption style JSON) into a **UGC preset**:
 
 ```json
@@ -647,13 +687,13 @@ Upgrade the audit-v1 template (caption style JSON) into a **UGC preset**:
 | CapCut feature | ClipCut status | Verdict |
 |---|---|---|
 | Auto captions, word-level | ✅ have (Whisper/WhisperX, better accuracy) | keep |
-| Animated caption styles / word highlight | ⚠ static only | **F4 ASS karaoke — do** |
+| Animated caption styles / word highlight | ✅ ASS karaoke burn-in (export-only, no live-preview animation) | done |
 | Silence / filler auto-cut | ✅ have (VAD + ffmpeg + fillers, arguably better) | keep |
-| Direct block trimming on timeline | ✕ | **F1 — do** |
-| Ripple editing | ✕ (snapGaps is manual) | F1 ripple toggle |
-| Templates | ✕ | **F4 — do** |
-| Batch/auto pipeline | ⚠ single-clip Auto Mode | **F3 — do** |
-| Aspect presets + safe zones | ⚠ aspect only, preview-only | F4 safe zones + export-side crop/pad (ffmpeg scale/pad per aspect — export currently ignores aspect entirely; flag as gap) |
+| Direct block trimming on timeline | ✅ cuts, captions, and now segments (edge-drag) | done |
+| Ripple editing | ✅ — Snap Gaps doubles as the ripple toggle (`_relayoutSegments()`) | done |
+| Templates | ✅ scoped to what ClipCut has (no text-layer slots) | done |
+| Batch/auto pipeline | ⚠ single-clip Auto Mode | **F3 — still to do** |
+| Aspect presets + safe zones | ✅ safe-zone guide overlay (9:16) + export-side crop/pad already fixed (bug #21) | done |
 | Music + auto-ducking | ✕ | later (P3) — sidechaincompress filter, one track |
 | Speed ramp / curves | ✕ | later (P3), UGC value is modest |
 | Background removal, effects, stickers | ✕ | **out of scope — don't chase** |

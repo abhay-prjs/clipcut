@@ -181,6 +181,7 @@ function _startEditWord(span) {
       if (newText && newText !== originalText) {
         saveHistory(); // snapshot pre-edit state only when something actually changed
         cap.text = newText;
+        delete cap.words; // stale per-word timing no longer matches the edited text — word-highlight export falls back to static for this caption
         span.textContent = newText;
         renderTimeline();
         toast('✓ Caption updated');
@@ -223,6 +224,7 @@ function _startEditWord(span) {
     const newCap = { id: crypto.randomUUID(), text: rightText, start: splitAt, end: cap.end };
     cap.text = leftText;
     cap.end  = splitAt;
+    delete cap.words; // split invalidates per-word timing on both halves — word-highlight export falls back to static for these
     S.captions.splice(S.captions.indexOf(cap) + 1, 0, newCap);
 
     updateCaptionList();
@@ -505,6 +507,16 @@ function setCaptionStyle(style){
 function setCaptionLayout(layout,btn){
   S.captionLayout=layout;
   ['layoutSingle','layoutStack','layoutGrid'].forEach(id=>document.getElementById(id).classList.remove('primary'));
+  btn.classList.add('primary');
+}
+
+// 'static' | 'word-highlight' — only affects burned-in export captions
+// (_generate_ass in serve.py); the live preview overlay is unchanged either
+// way (word-by-word highlight in the browser preview is a separate,
+// not-yet-built follow-up — see CLAUDE.md).
+function setCaptionMode(mode,btn){
+  S.captionMode=mode;
+  ['capModeStatic','capModeKaraoke'].forEach(id=>document.getElementById(id)?.classList.remove('primary'));
   btn.classList.add('primary');
 }
 

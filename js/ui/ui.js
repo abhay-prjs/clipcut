@@ -41,6 +41,27 @@ function setAspect(r,el){
   el.classList.add('active');
   document.getElementById('videoContainer').style.aspectRatio=r;
   S.aspect=r; // also drives the export-side crop/pad stage (bug #21) — preview was previously CSS-only
+  _updateSafeZoneOverlay();
+}
+
+// Platform UI-safe-area guides (TikTok/Reels/Shorts) — only meaningful for
+// 9:16 vertical; hidden for any other aspect regardless of the toggle state.
+// Percentages are approximate (top ~10%, bottom ~18%, sides ~12% is where
+// each platform's own UI chrome — captions bar, like/share rail, username —
+// tends to sit), not pulled from a platform API, so treat as a guide, not a
+// guarantee.
+function toggleSafeZones(){
+  S.safeZonesVisible = !S.safeZonesVisible;
+  // Deliberately NOT .active — that class is the mutually-exclusive aspect
+  // selector's own "currently chosen" state, and setAspect() clears it off
+  // every .ab element (including this one) on every aspect change.
+  document.getElementById('safeZoneBtn')?.classList.toggle('sz-active', S.safeZonesVisible);
+  _updateSafeZoneOverlay();
+}
+function _updateSafeZoneOverlay(){
+  const el=document.getElementById('safeZoneOverlay');
+  if(!el) return;
+  el.style.display = (S.safeZonesVisible && S.aspect==='9/16') ? 'block' : 'none';
 }
 
 function setAspectMode(mode){
@@ -69,7 +90,7 @@ function syncTopbarClipName(){
 function switchTab(name){
   document.querySelectorAll('.panel-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id===`tab-${name}`));
-  if(name==='settings') _loadWhisperConfigFromServer();
+  if(name==='settings'){ _loadWhisperConfigFromServer(); refreshTemplateList(); }
 }
 
 function switchInspTab(name){

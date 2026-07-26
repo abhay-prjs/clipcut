@@ -248,12 +248,19 @@
         </div>
         <video id="previewVideo" style="display:none" crossorigin="anonymous"></video>
         <div class="caption-overlay" id="captionOverlay"></div>
+        <div class="safe-zone-overlay" id="safeZoneOverlay" style="display:none">
+          <div class="sz-line sz-top"></div>
+          <div class="sz-line sz-bottom"></div>
+          <div class="sz-line sz-left"></div>
+          <div class="sz-line sz-right"></div>
+        </div>
       </div>
       <div class="aspect-badges">
         <div class="ab active" onclick="setAspect('9/16',this)">9:16</div>
         <div class="ab" onclick="setAspect('1/1',this)">1:1</div>
         <div class="ab" onclick="setAspect('4/5',this)">4:5</div>
         <div class="ab" onclick="setAspect('16/9',this)">16:9</div>
+        <div class="ab" id="safeZoneBtn" onclick="toggleSafeZones()" title="Toggle platform UI safe-zone guides (9:16 only)">👁 Safe Zones</div>
       </div>
     </div>
     <div class="playback-bar">
@@ -367,6 +374,12 @@
         <button class="act-btn" id="layoutGrid"   style="margin:0;flex:1;font-size:9px" onclick="setCaptionLayout('grid',this)">Grid</button>
       </div>
 
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Export Mode</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;" title="Affects burned-in export captions only — the live preview overlay is unchanged">
+        <button class="act-btn primary" id="capModeStatic" style="margin:0;flex:1;font-size:9px" onclick="setCaptionMode('static',this)">Static</button>
+        <button class="act-btn" id="capModeKaraoke" style="margin:0;flex:1;font-size:9px" onclick="setCaptionMode('word-highlight',this)">Word Highlight</button>
+      </div>
+
       <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Size</div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
         <input type="range" id="fontSizeSlider" min="8" max="120" value="15" style="flex:1" oninput="syncFontSize('slider',this.value)">
@@ -376,7 +389,7 @@
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:10px;color:var(--text2)">Text color</span>
-        <input type="color" value="#ffffff" style="width:36px;height:22px;border:1px solid var(--b2);border-radius:3px;background:var(--s2);cursor:pointer;padding:1px 2px" oninput="setCaptionColor(this.value)">
+        <input type="color" id="captionColorInput" value="#ffffff" style="width:36px;height:22px;border:1px solid var(--b2);border-radius:3px;background:var(--s2);cursor:pointer;padding:1px 2px" oninput="setCaptionColor(this.value)">
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -397,7 +410,7 @@
       </div>
 
       <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Background</div>
-      <select class="speed-sel" style="width:100%;height:26px;margin-bottom:8px" onchange="setCaptionBg(this.value)">
+      <select id="captionBgSelect" class="speed-sel" style="width:100%;height:26px;margin-bottom:8px" onchange="setCaptionBg(this.value)">
         <option value="rgba(0,0,0,.85)">Black</option>
         <option value="rgba(200,255,71,.9)">Lime</option>
         <option value="rgba(255,71,87,.9)">Red</option>
@@ -575,6 +588,22 @@
           <span style="font-size:10px;color:var(--text)">AI script analysis</span>
           <input type="checkbox" id="deepAIChk" checked onchange="toggleSetting('deepAI')" style="cursor:pointer;accent-color:var(--blue);width:13px;height:13px">
         </label>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">UGC Templates</div>
+      <div style="font-size:9px;color:var(--text3);margin-bottom:8px;line-height:1.5">Bundles aspect, caption style/mode, export preset, and detection settings — not a general text-layer system, applies to what ClipCut already has.</div>
+      <select class="speed-sel" id="templateSelect" style="width:100%;height:26px;margin-bottom:6px">
+        <option value="">— Select a template —</option>
+      </select>
+      <div style="display:flex;gap:5px;margin-bottom:8px">
+        <button class="act-btn" style="margin:0;flex:1;font-size:9px" onclick="applyTemplate(document.getElementById('templateSelect').value)">Apply</button>
+        <button class="act-btn" style="margin:0;flex:1;font-size:9px;color:var(--red)" onclick="deleteTemplateUI(document.getElementById('templateSelect').value)">Delete</button>
+      </div>
+      <div style="display:flex;gap:5px">
+        <input type="text" id="templateNameInput" class="api-key-input" style="flex:1;padding:6px 9px;height:26px" placeholder="Template name">
+        <button class="act-btn" style="margin:0;font-size:9px;white-space:nowrap;padding:0 10px" onclick="saveCurrentAsTemplate()">Save Current</button>
       </div>
     </div>
 
@@ -845,6 +874,7 @@
 <script src="js/core/project.js"></script>
 <script src="js/ui/ui.js"></script>
 <script src="js/ui/settings.js"></script>
+<script src="js/ui/templates.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

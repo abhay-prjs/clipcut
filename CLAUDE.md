@@ -199,7 +199,8 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
 - `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
 - `export_video(..., text_style_json='{}', preview_height_px=0)` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. The last two params only matter when `burn_captions=True` — see `_generate_ass()` below
-- `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h)` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here
+- `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static')` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here. `caption_mode='word-highlight'` (Part F4) renders ASS karaoke (`\k` tags per word, from `cap['words']` — per-word timestamps preserved at transcription time in whisper.js, cleared by manual edit/split in captions.js since they'd no longer match) instead of static text; falls back to static per-caption if `words` is missing
+- `list_templates()` / `save_template(name, template_json)` / `delete_template(name)` → CRUD over `templates.json` (next to config.json) — backs the Settings tab's UGC Templates section (`js/ui/templates.js`)
 - `_compute_output_dims(source_path, aspect, aspect_mode)` / `_probe_dimensions(source_path)` — ffprobes source resolution and replicates `_aspect_filter()`'s crop/pad math to get the actual exported frame size (needed for ASS `PlayResX/Y`)
 - `_hex_to_ass_color()` / `_parse_bg_color()` — CSS hex/rgba → ASS `&HAABBGGRR` color string conversion (note ASS reverses RGB byte order and inverts alpha vs CSS)
 - `cancel_export()` → sets `_export_cancelled = True`
@@ -297,6 +298,8 @@ S.settings         // pipeline + auto mode config (persisted to localStorage via
   // Transcription: detectRetakes
 S.stripPunct       // strip punctuation from captions (default true)
 S.captionLayout    // single | stack | grid
+S.captionMode      // 'static' | 'word-highlight' (karaoke ASS export only) — see setCaptionMode()
+S.safeZonesVisible // platform UI safe-zone guide overlay toggle (9:16 only) — see toggleSafeZones()
 S.flipH / S.flipV  // video flip state
 S.trimIn / S.trimOut // current trim points
 S.selectedCutId    // currently selected cut in timeline
@@ -397,7 +400,7 @@ is currently showing gap-hatched cuts pre-snap.
 - `_mergeCaptionsIntoStrip(caps)` — merges adjacent captions (gap <0.3s) into a solid no-text strip; only used by the timeline caption track below ~15px/s zoom (readability fallback, not editable)
 
 **js/captions/whisper.js**
-- `transcribeWithWhisper()` — calls pywebview.api.transcribe(sourcePath), requires clip.sourcePath
+- `transcribeWithWhisper()` — calls pywebview.api.transcribe(sourcePath), requires clip.sourcePath. Each `S.captions` entry also gets a `words: [{text,start,end}]` array (the chunk's constituent words, individually timestamped) — used by word-highlight karaoke ASS export (`_generate_ass` in serve.py); manual edit/split in captions.js's transcript editor deletes `.words` on the affected caption(s) since the text no longer matches it 1:1
 - `checkWhisperServer()` — calls pywebview.api.ping() to load model
 
 **js/detection/waveform.js**
@@ -515,6 +518,13 @@ is currently showing gap-hatched cuts pre-snap.
 - `_loadWhisperConfigFromServer()` — calls `pywebview.api.get_whisper_config()`, populates backend pills + model select + batch slider
 - `updateSettingsUI()` — syncs all DOM controls from S.settings
 
+**js/ui/templates.js — UGC Templates (Part F4)**
+- `refreshTemplateList()` — calls `pywebview.api.list_templates()`, populates `#templateSelect`. Called on every switch to the Settings tab (`switchTab()` in ui.js), same lazy pattern as `_loadWhisperConfigFromServer()`
+- `saveCurrentAsTemplate()` — bundles the current aspect/aspectMode/textStyle/captionLayout/captionMode/export-preset/a subset of S.settings (see `_buildTemplateFromCurrent()`) under the name typed into `#templateNameInput`, via `pywebview.api.save_template()`
+- `applyTemplate(name)` — `saveHistory()` then applies every field in the named template onto live state, re-syncing every UI control that isn't already wired to its own live-apply setter. Templates deliberately don't include the spec's "text layers" (hook slot, etc.) — ClipCut has no freeform text-layer feature yet to apply that to
+- `_syncTextStyleUI()` — re-syncs the Caption Style panel's DOM controls from `S.textStyle` after a template changes it directly (bypassing the individual `setCaptionFont()`/`syncFontSize()`/etc. setters, which each only touch their own control). **Known gap:** the Weight/Layout buttons have no ids (inline `onclick(value,this)` only) so their `.primary` highlight isn't re-synced here — `S.textStyle.fontWeight`/`S.captionLayout` are still correctly applied to the live overlay and export, this is a settings-panel cosmetic gap only
+- `deleteTemplateUI(name)` — confirms, calls `pywebview.api.delete_template()`, refreshes the list
+
 ## handleTLClick — Source Time Mapping (CRITICAL)
 After `trimBefore`/`trimAfter`, segments have `timelineStart ≠ sourceStart`. Raw `x/zoom` gives wrong source time.
 Always map through segments:
@@ -580,7 +590,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
 **Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only), Edit Check (🔍 Check Edit → `runEditLint()`, see `js/detection/linter.js`) directly above Apply Selected Cuts
 **AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
-**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · Reset to Defaults
+**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, MediaPipe pass) · UGC Templates (`js/ui/templates.js` — save/apply/delete named presets) · Reset to Defaults
 
 ## Auto Mode & Deep AI Mode
 `runAutoMode(deep)` in `js/detection/silence.js` — all steps gated by `S.settings` flags:

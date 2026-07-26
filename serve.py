@@ -357,7 +357,7 @@ def _parse_bg_color(bg):
     ass_alpha = int(round((1 - a) * 255))
     return f'&H{ass_alpha:02X}{b:02X}{g:02X}{r:02X}'.upper(), True
 
-def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h):
+def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static'):
     """Build an ASS subtitle file from S.textStyle so burned-in export
     captions match the Captions inspector tab's font/size/color/stroke/
     position instead of always rendering plain text (bug #10's remaining half).
@@ -374,6 +374,16 @@ def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_
     Arial Black, Georgia, Impact) and any font loaded via "+ Load Font" in the
     browser are not guaranteed to be — bundling the actual font file via the
     subtitles filter's fontsdir= option is a separate follow-up.
+
+    caption_mode='word-highlight' (Part F4) renders each caption as ASS
+    karaoke (\\k tags per word, from cap['words'] — per-word timestamps
+    preserved at transcription time in whisper.js) instead of static text:
+    libass progressively swaps each word from SecondaryColour (not yet
+    "sung") to PrimaryColour as playback reaches it — the standard karaoke
+    mechanism, repurposed here for CapCut-style word-highlight captions.
+    Falls back to static rendering per-caption if a caption has no `words`
+    (manual edits/splits in the transcript editor clear it, since the text
+    no longer matches the original per-word timing 1:1).
     """
     scale = (out_h / preview_height_px) if preview_height_px and preview_height_px > 0 else 1.0
     font_size = max(1, int(round((text_style.get('fontSize') or 15) * scale)))
@@ -390,6 +400,10 @@ def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_
     outline_color = _hex_to_ass_color(text_style.get('strokeColor') or '#000000')
     back_color, has_bg = _parse_bg_color(text_style.get('background') or '')
     border_style = 3 if has_bg else 1  # 3 = opaque box, 1 = outline+shadow
+    # Karaoke: words not yet "sung" render in SecondaryColour, switching to
+    # PrimaryColour as \k reaches them — a dim neutral gray reads as "upcoming"
+    # regardless of the user's chosen caption color.
+    secondary_color = '&H00969696' if caption_mode == 'word-highlight' else '&H000000FF'
 
     pos_x = (text_style.get('posX') if text_style.get('posX') is not None else 50) / 100 * out_w
     pos_y = out_h - ((text_style.get('posY') if text_style.get('posY') is not None else 14) / 100 * out_h)
@@ -416,7 +430,7 @@ def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
         "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: Default,{font_name},{font_size},{primary_color},&H000000FF,{outline_color},{back_color},"
+        f"Style: Default,{font_name},{font_size},{primary_color},{secondary_color},{outline_color},{back_color},"
         f"{bold},0,0,0,100,100,0,0,{border_style},{outline_px:.1f},0,2,10,10,10,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
@@ -430,7 +444,20 @@ def _generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_
         te = src_to_tl(cap["end"])
         if te is None:
             te = ts + (cap["end"] - cap["start"])
-        text = (cap.get("text") or "").replace("\n", "\\N").replace("{", "(").replace("}", ")")
+
+        text = None
+        if caption_mode == 'word-highlight' and cap.get('words'):
+            karaoke_parts = []
+            for w in cap['words']:
+                cs = max(1, int(round((w['end'] - w['start']) * 100)))  # centiseconds, \k's unit
+                wtext = (w.get('text') or '').replace('{', '(').replace('}', ')')
+                if wtext:
+                    karaoke_parts.append(f"{{\\k{cs}}}{wtext}")
+            if karaoke_parts:
+                text = ' '.join(karaoke_parts)
+        if text is None:
+            text = (cap.get("text") or "").replace("\n", "\\N").replace("{", "(").replace("}", ")")
+
         # \an2 (bottom-center anchor) + \pos() overrides the style's own
         # alignment/margins — matches the live overlay's left:X%/bottom:Y%
         lines.append(
@@ -715,6 +742,46 @@ class API:
             'whisperx_batch_size': int(batch_size),
         })
         return {'ok': True, 'backend': WHISPER_BACKEND, 'model': WHISPERX_MODEL, 'batch_size': WHISPERX_BATCH_SIZE}
+
+    # ── UGC templates (Part F4) ─────────────────────────────────────────────
+    # Presets bundling aspect/aspectMode, caption style+mode, export preset,
+    # and a subset of the detection/auto-mode settings. Deliberately doesn't
+    # include the spec's "text layers" (hook slot etc.) — ClipCut has no
+    # freeform text-layer feature to apply that to yet; templates cover what
+    # actually exists (captions, aspect, detection settings, export quality).
+
+    def list_templates(self):
+        """Returns {name: templateObject} from templates.json, or {} if missing/corrupt."""
+        try:
+            with open(os.path.join(BASE_DIR, 'templates.json'), encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def save_template(self, name, template_json):
+        """Adds/overwrites one named template in templates.json."""
+        try:
+            templates = self.list_templates()
+            templates[name] = json.loads(template_json)
+            with open(os.path.join(BASE_DIR, 'templates.json'), 'w', encoding='utf-8') as f:
+                json.dump(templates, f, indent=2)
+            log('TEMPLATE', f'✓ Saved "{name}"')
+            return {'success': True}
+        except Exception as e:
+            log('TEMPLATE', f'✕ save_template failed: {e}')
+            return {'success': False, 'error': str(e)}
+
+    def delete_template(self, name):
+        try:
+            templates = self.list_templates()
+            templates.pop(name, None)
+            with open(os.path.join(BASE_DIR, 'templates.json'), 'w', encoding='utf-8') as f:
+                json.dump(templates, f, indent=2)
+            log('TEMPLATE', f'✓ Deleted "{name}"')
+            return {'success': True}
+        except Exception as e:
+            log('TEMPLATE', f'✕ delete_template failed: {e}')
+            return {'success': False, 'error': str(e)}
 
     def ping(self):
         """Load (or confirm loaded) transcription + VAD models. Returns {online, model, device, backend}."""
@@ -1067,7 +1134,8 @@ class API:
                      preset='fast', flip_h=False, flip_v=False,
                      burn_captions=False, captions_json='[]', seg_meta_json='[]',
                      aspect='', aspect_mode='crop',
-                     text_style_json='{}', preview_height_px=0):
+                     text_style_json='{}', preview_height_px=0,
+                     caption_mode='static'):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -1091,7 +1159,8 @@ class API:
                 preset, flip_h, flip_v,
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
-                text_style_json, preview_height_px
+                text_style_json, preview_height_px,
+                caption_mode
             )
         except Exception as exc:
             import traceback
@@ -1103,7 +1172,8 @@ class API:
                             preset, flip_h, flip_v,
                             burn_captions, captions_json, seg_meta_json,
                             aspect='', aspect_mode='crop',
-                            text_style_json='{}', preview_height_px=0):
+                            text_style_json='{}', preview_height_px=0,
+                            caption_mode='static'):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1151,7 +1221,7 @@ class API:
                 source_path, segments, save_path, p, flip_filter,
                 json.loads(captions_json), json.loads(seg_meta_json), aspect_filter,
                 json.loads(text_style_json or '{}'), preview_height_px,
-                aspect, aspect_mode
+                aspect, aspect_mode, caption_mode
             )
 
         t_start = time.time()
@@ -1350,7 +1420,7 @@ class API:
 
     def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta,
                        aspect_filter='', text_style=None, preview_height_px=0,
-                       aspect='', aspect_mode='crop'):
+                       aspect='', aspect_mode='crop', caption_mode='static'):
         """filter_complex single-pass with styled ASS caption burn-in."""
         total_dur = sum(seg['end'] - seg['start'] for seg in segments)
         total_us  = int(total_dur * 1_000_000)
@@ -1359,8 +1429,8 @@ class API:
         try:
             if captions and seg_meta:
                 out_w, out_h = _compute_output_dims(source_path, aspect, aspect_mode)
-                log('EXPORT', f'Generating ASS ({len(captions)} captions, {out_w}x{out_h})...')
-                ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h)
+                log('EXPORT', f'Generating ASS ({len(captions)} captions, {out_w}x{out_h}, mode={caption_mode})...')
+                ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h, caption_mode)
                 tmp = tempfile.NamedTemporaryFile(
                     suffix='.ass', delete=False, mode='w', encoding='utf-8'
                 )
