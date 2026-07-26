@@ -4,8 +4,6 @@
 S.whisperPort = localStorage.getItem('vexxe_whisper_port') || S.whisperPort;
 S.whisperMode = localStorage.getItem('vexxe_whisper_mode') || S.whisperMode;
 
-function getWhisperBase(){ return `http://localhost:${document.getElementById('whisperPortInput')?.value||S.whisperPort}`; }
-
 function setWhisperMode(m){
   S.whisperMode=m;
   localStorage.setItem('vexxe_whisper_mode', m);
