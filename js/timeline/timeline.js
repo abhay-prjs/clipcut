@@ -35,6 +35,7 @@ function renderTimeline(){
 
   // ── VIDEO TRACK: one element per segment ───────────────────
   const vt=document.getElementById('videoTrack'); vt.innerHTML='';
+  const vtFrag=document.createDocumentFragment();
   S.segments.forEach((seg,i)=>{
     const left=seg.timelineStart*zoom;
     const width=Math.max(seg.duration*zoom,20);
@@ -51,7 +52,7 @@ function renderTimeline(){
       renderTimeline();
       updateTrimContext();
     });
-    vt.appendChild(el);
+    vtFrag.appendChild(el);
   });
 
   // ── CUTS ────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ function renderTimeline(){
     dead:'✕ dead', filler:'✕ filler', retake:'✕ retake', dead_air:'✕ silence', weak:'? weak',
   };
   const ss=document.getElementById('suggestionStrip'); ss.innerHTML='';
+  const ssFrag=document.createDocumentFragment();
   if(S.silenceVisible){
     // Highlights → thin top bar on the video track, not a full-height wash
     S.cuts.filter(c=>c.type==='highlight').forEach(cut=>{
@@ -91,7 +93,7 @@ function renderTimeline(){
         if(video.src) video.currentTime=cut.start;
         toast(`✦ Highlight · ${cut.start.toFixed(2)}s → ${cut.end.toFixed(2)}s`);
       });
-      vt.appendChild(bar);
+      vtFrag.appendChild(bar);
     });
 
     // Selected cuts → one solid element per cut on the video track (only before snap)
@@ -126,7 +128,7 @@ function renderTimeline(){
           lbl.textContent=(cut.type==='filler'&&cut.scriptPart)?'~ script':(_cutTypeLabel[cut.type]||_cutTypeLabel.dead);
           el.appendChild(lbl);
         }
-        vt.appendChild(el);
+        vtFrag.appendChild(el);
       });
     }
 
@@ -147,9 +149,11 @@ function renderTimeline(){
       el.style.background=color;
       el.title=tooltip;
       el.addEventListener('click',e=>{e.stopPropagation();selectCut(cut.id);});
-      ss.appendChild(el);
+      ssFrag.appendChild(el);
     });
   }
+  vt.appendChild(vtFrag);
+  ss.appendChild(ssFrag);
   updateCutBadge();
 
   // ── CAPTION TRACK ───────────────────────────────────────────
@@ -158,6 +162,7 @@ function renderTimeline(){
   // the default; word-level only above ~150px/s; a merged solid strip (no
   // text) below ~30px/s.
   const ct=document.getElementById('captionTrack'); ct.innerHTML='';
+  const ctFrag=document.createDocumentFragment();
   let capItems;
   if(zoom<30) capItems=_mergeCaptionsIntoStrip(S.captions);
   else if(zoom>=150) capItems=S.captions.map(c=>({start:c.start,end:c.end,text:c.text}));
@@ -186,8 +191,9 @@ function renderTimeline(){
     } else {
       el.title='Speech';
     }
-    ct.appendChild(el);
+    ctFrag.appendChild(el);
   });
+  ct.appendChild(ctFrag);
 
   // Redraw waveform only if something that affects its shape actually changed
   // (zoom, segment layout, or the waveform data itself) — posting an identical
@@ -219,21 +225,23 @@ function renderTimeline(){
 function buildRuler(totalDur,totalW,zoom){
   const r=document.getElementById('ruler');
   r.style.width=totalW+'px'; r.innerHTML='';
+  const frag=document.createDocumentFragment();
   const interval=zoom>=80?1:zoom>=40?2:zoom>=20?5:10;
   for(let t=0;t<=totalDur;t+=interval/4){
     const isMaj=t%interval===0;
     const m=document.createElement('div'); m.className='ruler-mark'; m.style.left=(t*zoom)+'px';
     const l=document.createElement('div'); l.className='ruler-line'+(isMaj?' maj':''); m.appendChild(l);
     if(isMaj){const n=document.createElement('div');n.className='ruler-num';n.textContent=t>=60?`${Math.floor(t/60)}:${String(Math.round(t%60)).padStart(2,'0')}`:`${t}s`;m.appendChild(n);}
-    r.appendChild(m);
+    frag.appendChild(m);
   }
   // Markers
   S.markers.forEach(mk=>{
     const el=document.createElement('div');
     el.style.cssText=`position:absolute;top:0;left:${mk.t*zoom}px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;`;
     el.innerHTML=`<span style="color:var(--accent);font-size:9px;line-height:1">♦</span><span style="color:var(--accent);font-size:7px;white-space:nowrap;margin-top:1px">${mk.name}</span>`;
-    r.appendChild(el);
+    frag.appendChild(el);
   });
+  r.appendChild(frag);
 }
 
 function updatePlayhead(){
