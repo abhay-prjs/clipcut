@@ -445,6 +445,87 @@ class API:
         log('PROBE', f'fps: {fps:.3f}')
         return fps
 
+    # ── Project save/load (bug #8) ────────────────────────────────────────────
+
+    _AUTOSAVE_NAME = 'autosave.ccproj'
+
+    def save_project(self, project_json, output_name='clipcut_project.ccproj'):
+        """Native Save dialog, writes the project JSON string to disk."""
+        log('PROJECT', 'Opening native Save dialog for project file...')
+        save_path = webview.windows[0].create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename=output_name,
+            file_types=('ClipCut Project (*.ccproj)',)
+        )
+        if not save_path:
+            log('PROJECT', 'Save dialog cancelled')
+            return {'success': False, 'error': 'cancelled'}
+        if isinstance(save_path, (list, tuple)):
+            save_path = save_path[0]
+        if not save_path.lower().endswith('.ccproj'):
+            save_path += '.ccproj'
+        try:
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(project_json)
+            log('PROJECT', f'✓ Saved project: {save_path}')
+            return {'success': True, 'path': save_path}
+        except Exception as exc:
+            log('PROJECT', f'✕ Save failed: {exc}')
+            return {'success': False, 'error': str(exc)}
+
+    def open_project(self):
+        """Native Open dialog, returns the project JSON string or None."""
+        log('PROJECT', 'Opening native Open dialog for project file...')
+        result = webview.windows[0].create_file_dialog(
+            webview.FileDialog.OPEN,
+            file_types=('ClipCut Project (*.ccproj)',)
+        )
+        path = result[0] if result else None
+        if not path:
+            log('PROJECT', 'Open dialog cancelled')
+            return None
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = f.read()
+            log('PROJECT', f'✓ Loaded project: {path}')
+            return data
+        except Exception as exc:
+            log('PROJECT', f'✕ Load failed: {exc}')
+            return None
+
+    def autosave_project(self, project_json):
+        """Silently writes the project JSON to a fixed path — no dialog. Called
+        periodically by the JS side; failures are logged, not surfaced to the user."""
+        path = os.path.join(BASE_DIR, self._AUTOSAVE_NAME)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(project_json)
+        except Exception as exc:
+            log('PROJECT', f'✕ Autosave failed: {exc}')
+
+    def check_autosave(self):
+        """Returns the autosave file's JSON content if it exists, else None —
+        used for the startup recovery prompt."""
+        path = os.path.join(BASE_DIR, self._AUTOSAVE_NAME)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as exc:
+            log('PROJECT', f'✕ Reading autosave failed: {exc}')
+            return None
+
+    def clear_autosave(self):
+        """Deletes the autosave file (called after a real save, or once the
+        user dismisses/recovers it)."""
+        path = os.path.join(BASE_DIR, self._AUTOSAVE_NAME)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as exc:
+            log('PROJECT', f'✕ Clearing autosave failed: {exc}')
+
     def load_ui_settings(self):
         """Load persisted UI/pipeline settings from ui_settings.json."""
         path = os.path.join(BASE_DIR, 'ui_settings.json')
@@ -1292,6 +1373,10 @@ try:
     menu = [
         webview.Menu('File', [
             webview.MenuAction('Open Video',        _js('onUploadZoneClick()')),
+            webview.MenuSeparator(),
+            webview.MenuAction('Save Project',      _js('saveProject()')),
+            webview.MenuAction('Open Project',      _js('openProject()')),
+            webview.MenuSeparator(),
             webview.MenuAction('Export',            _js('openExportModal()')),
             webview.MenuSeparator(),
             webview.MenuAction('Quit',              lambda: window.destroy()),
