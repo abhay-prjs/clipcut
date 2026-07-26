@@ -240,6 +240,31 @@ function renderTimeline(){
   });
   tlt.appendChild(tltFrag);
 
+  // ── IMAGE LAYERS ("+ Image" stickers) ────────────────────────────────
+  const ilt=document.getElementById('imageLayerTrack'); ilt.innerHTML='';
+  const iltFrag=document.createDocumentFragment();
+  S.imageLayers.forEach(layer=>{
+    const tlStart=sourceTimeToTimeline(layer.start);
+    const tlEnd=sourceTimeToTimeline(layer.end);
+    if(tlStart===null && tlEnd===null) return;
+    const safeStart=tlStart ?? sourceTimeToTimeline(layer.start+0.05) ?? 0;
+    const safeEnd=tlEnd ?? sourceTimeToTimeline(layer.end-0.05) ?? safeStart+(layer.end-layer.start);
+    const left=safeStart*zoom;
+    const width=Math.max((safeEnd-safeStart)*zoom,20);
+    const el=document.createElement('div');
+    el.className='tl-imagelayer'+(layer.id===S.selectedImageLayerId?' selected':'');
+    el.style.left=left+'px';
+    el.style.width=width+'px';
+    el.dataset.imgId=layer.id;
+    const fname=(layer.path||'').split(/[/\\]/).pop()||'Image';
+    el.textContent=fname;
+    el.title=fname;
+    el.addEventListener('click',e=>{ e.stopPropagation(); selectImageLayer(layer.id); });
+    _bindImageLayerDrag(el, layer);
+    iltFrag.appendChild(el);
+  });
+  ilt.appendChild(iltFrag);
+
   // Redraw waveform only if something that affects its shape actually changed
   // (zoom, segment layout, or the waveform data itself) — posting an identical
   // draw_tl message on every render (e.g. a pure selection change) is wasted
@@ -253,7 +278,7 @@ function renderTimeline(){
     }
   }
 
-  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → textLayerTrack → playhead
+  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → textLayerTrack → imageLayerTrack → playhead
   const ti=document.getElementById('tracksInner');
   [
     document.getElementById('ruler'),
@@ -262,6 +287,7 @@ function renderTimeline(){
     document.getElementById('waveformRow'),
     document.getElementById('captionTrack'),
     document.getElementById('textLayerTrack'),
+    document.getElementById('imageLayerTrack'),
     ph,
   ].forEach(el=>ti.appendChild(el));
   updatePlayhead();

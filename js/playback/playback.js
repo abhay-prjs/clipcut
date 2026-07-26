@@ -269,6 +269,7 @@ function _onVideoFrame(now, metadata) {
     updatePlayhead(srcTime);
     updateCaptionOverlay(srcTime);
     updateTextLayerOverlays(srcTime);
+    updateImageLayerOverlays(srcTime);
     updateTranscriptHighlight(srcTime);
     updateTrimPlayhead(srcTime);
     return;
@@ -329,6 +330,7 @@ function _onVideoFrame(now, metadata) {
   updatePlayhead();
   updateCaptionOverlay();
   updateTextLayerOverlays(t);
+  updateImageLayerOverlays(t);
   updateTranscriptHighlight(t);
   updateTrimPlayhead();
 }
@@ -351,6 +353,7 @@ function _onVideoFrameFallback() {
     updatePlayhead(srcTime);
     updateCaptionOverlay(srcTime);
     updateTextLayerOverlays(srcTime);
+    updateImageLayerOverlays(srcTime);
     updateTranscriptHighlight(srcTime);
     updateTrimPlayhead(srcTime);
     return;
@@ -398,6 +401,7 @@ function _onVideoFrameFallback() {
   updatePlayhead();
   updateCaptionOverlay();
   updateTextLayerOverlays(t);
+  updateImageLayerOverlays(t);
   updateTranscriptHighlight(t);
   updateTrimPlayhead();
 }

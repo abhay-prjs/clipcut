@@ -27,6 +27,8 @@ function _makeSnapshot(){
     textStyle:         JSON.parse(JSON.stringify(S.textStyle)),
     textLayers:        JSON.parse(JSON.stringify(S.textLayers)),
     selectedTextLayerId: S.selectedTextLayerId,
+    imageLayers:       JSON.parse(JSON.stringify(S.imageLayers)),
+    selectedImageLayerId: S.selectedImageLayerId,
   };
 }
 
@@ -117,6 +119,8 @@ function _applySnapshot(snap){
   _applyTextStyle();
   renderTextLayerInspector();
   updateTextLayerOverlays(video.currentTime||0);
+  renderImageLayerInspector();
+  updateImageLayerOverlays(video.currentTime||0);
 }
 
 function undo(){

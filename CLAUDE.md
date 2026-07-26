@@ -91,7 +91,8 @@ docs/backups predating the 2026-07-26 rename may still say otherwise).
     │   ├── ui.js           # tools, modals, tabs, toast(), keyboard shortcuts, markers, loop, toggleSkipCuts()
     │   ├── settings.js     # loadSettings(), saveSettings(), toggleSetting(), setCombineMode(), updateSettingsUI()
     │   ├── templates.js    # UGC Templates CRUD/apply (Part F4)
-    │   └── textlayers.js   # "Add Text" freeform text layers (addTextLayer(), updateTextLayerOverlays(), etc.)
+    │   ├── textlayers.js   # "Add Text" freeform text layers (addTextLayer(), updateTextLayerOverlays(), etc.)
+    │   └── imagelayers.js  # "+ Image" sticker/image overlays (addImageLayer(), updateImageLayerOverlays(), etc.)
     └── main.js             # Init: renderTimeline(), loadConfig(), loadSettings(), FFmpeg shim, welcome toast
 
 ### Script load order in clipcut.html
@@ -102,6 +103,7 @@ js/config/config.js
 js/captions/captions.js
 js/captions/whisper.js
 js/ui/textlayers.js
+js/ui/imagelayers.js
 js/detection/waveform.js
 js/detection/silence.js
 js/detection/linter.js
@@ -196,6 +198,7 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `open_file()` → native file picker (`webview.FileDialog.OPEN`), returns absolute path
 - `pick_folder()` → native folder picker (`webview.FileDialog.FOLDER`), returns path
 - `list_video_files(folder_path)` → top-level-only scan (no subfolder recursion) for video files, returns sorted absolute paths — backs the "📁 Import Folder" button (`onImportFolderClick()` in `js/media/import.js`), which links every file in the folder via the normal `loadClipFromPath()` pipeline (real `sourcePath`, no upload)
+- `pick_image()` → native image file picker (mirrors `open_file()`), backs the "+ Image" sticker/overlay button (`js/ui/imagelayers.js`)
 - `probe_duration(source_path)` → ffprobe duration in seconds (for unplayable containers)
 - `ping()` → loads transcription model (backend-dependent) + Silero VAD (lazy singletons), returns `{online, model, device, backend}`
 - `transcribe(source_path)` → ffmpeg audio extract + transcription. Returns `{words, language, duration, backend}` + optional `retake_cuts` when backend=whisperx
@@ -204,7 +207,7 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `mediapipe_detect(source_path, lip_threshold, min_speaking_ms, frame_skip)` → `{speaking_segments, cuts, count, duration}` — MediaPipe FaceMesh lip aperture; inverts speaking → dead_air cuts
 - `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
 - `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
-- `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static', text_layers_json='[]')` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode`/`text_layers_json` only matter when `burn_captions=True` — see `_generate_ass()` below. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic
+- `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static', text_layers_json='[]', image_layers_json='[]')` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode`/`text_layers_json`/`image_layers_json` only matter when `burn_captions=True` — see `_generate_ass()` below and `js/ui/imagelayers.js`'s CLAUDE.md entry for `image_layers_json`. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic
 - `export_video_batch_one(source_path, segments_json, save_path, ...)` → same params/encode core as `export_video()` (calls the same `_export_video_core()`) but takes `save_path` directly instead of opening a native Save dialog — backs batch export (`js/media/batch.js`), where N clips need one destination folder, not N dialogs
 - `_generate_ass(captions, seg_meta, text_style, preview_height_px, out_w, out_h, caption_mode='static')` — builds a styled ASS subtitle file from `S.textStyle` (font/size/weight/color/stroke/background/position) for burn-in export, replacing the old plain-SRT path. `preview_height_px` (the live preview `<video>` element's `clientHeight`, sent from `_doPywebviewExport()`) scales font size/stroke thickness proportionally from "px in the browser preview" to "px in the actual exported frame" (`out_w`/`out_h`, from `_compute_output_dims()`); posX/posY are already percentages so they map directly. Position uses `\an2\pos(x,y)` (bottom-center anchor) per caption line, matching the live overlay's `left:X%/bottom:Y%`. **Known limitation:** `fontFamily` only renders correctly if that font is installed on the machine running ffmpeg — bundling an uploaded custom font via the `subtitles` filter's `fontsdir=` option is a separate follow-up, not done here. `caption_mode='word-highlight'` (Part F4) renders ASS karaoke (`\k` tags per word, from `cap['words']` — per-word timestamps preserved at transcription time in whisper.js, cleared by manual edit/split in captions.js since they'd no longer match) instead of static text; falls back to static per-caption if `words` is missing
 - `list_templates()` / `save_template(name, template_json)` / `delete_template(name)` → CRUD over `templates.json` (next to config.json) — backs the Settings tab's UGC Templates section (`js/ui/templates.js`)
@@ -309,6 +312,8 @@ S.captionMode      // 'static' | 'word-highlight' (karaoke ASS export only) — 
 S.safeZonesVisible // platform UI safe-zone guide overlay toggle (9:16 only) — see toggleSafeZones()
 S.textLayers       // [{id,text,start,end,style}] — freeform "Add Text" objects, independent of captions. style is the same shape as S.textStyle but per-object (js/ui/textlayers.js)
 S.selectedTextLayerId // currently selected text layer, drives the Text inspector tab
+S.imageLayers      // [{id,path,url,start,end,style:{posX,posY,posZ}}] — sticker/image overlays (js/ui/imagelayers.js). Exported via real ffmpeg overlay compositing, NOT the ASS pipeline (ASS is text-only)
+S.selectedImageLayerId // currently selected image layer — mutually exclusive with S.selectedTextLayerId, both share the Text inspector tab
 S.flipH / S.flipV  // video flip state
 S.trimIn / S.trimOut // current trim points
 S.selectedCutId    // currently selected cut in timeline
@@ -362,6 +367,18 @@ Every detected issue uses this shape — do NOT deviate:
     strokeEnabled: true, strokeThickness: 2, strokeColor: '#000000',
     posX: 50, posY: 50, posZ: 1,   // percentage of frame, middle-center anchored (unlike captions' bottom-center)
   }
+}
+```
+
+## Image Layer Object Shape
+```js
+{
+  id: crypto.randomUUID(),
+  path: 'C:\\...',        // absolute local file path — used directly as an ffmpeg -i input on export
+  url: 'http://localhost:8080/video?path=...',  // HTTP streaming URL for the live preview <img>
+  start: 0.00,            // seconds in source file
+  end: 0.00,              // seconds in source file
+  style: { posX: 50, posY: 50, posZ: 1 }  // percentage of frame, middle-center anchored, posZ = scale — no font/color/stroke, content is a fixed image
 }
 ```
 
@@ -566,6 +583,15 @@ is currently showing gap-hatched cuts pre-snap.
 - Persists per-clip via `selectClip()` (same pattern as cuts/captions/markers) and in undo/redo snapshots (`_makeSnapshot()`/`_applySnapshot()`) — NOT included in UGC Templates (`_buildTemplateFromCurrent()`), since templates are style/settings presets, and text layers are actual per-clip content, not something that should inject clip A's specific text into clip B
 - **Known gap, v1 scope:** position is set via numeric X/Y/Z sliders only, no drag-in-preview repositioning (a separate, not-yet-built feature); no live per-word or animated text (static per-layer style only)
 
+**js/ui/imagelayers.js — "+ Image" sticker/image overlays**
+- `addImageLayer()` — calls `pywebview.api.pick_image()` (native picker), creates a layer at the playhead. Much lighter than text layers — just `{posX,posY,posZ}`, no font/color/stroke, since the content is a fixed image file rather than something styled in-app
+- `updateImageLayerOverlays(srcTime)` — same pool-managed-`<img>`-per-layer pattern as `updateTextLayerOverlays()`, wired into the same rVFC call sites right alongside it
+- Timeline: `#imageLayerTrack` (lane below Text), `_bindImageLayerDrag()` (`js/timeline/trim.js`) — identical grammar to `_bindTextLayerDrag()`, kept as a separate function since image layers select/render through their own state, not the text-layer functions
+- **Shares the "Text" inspector tab** with text layers rather than adding a 5th tab — `#textLayerEmpty` is a combined empty state ("+ Add Text" / "+ Add Image" side by side) shown only when neither a text nor image layer is selected (`_updateLayersEmptyState()` in textlayers.js, called by both render functions); selecting one layer type clears the other's selection (`S.selectedTextLayerId`/`S.selectedImageLayerId` are mutually exclusive) so only one editor block shows at a time
+- **Export is NOT the ASS pipeline** (ASS is text/subtitle-only, can't carry a raster image) — `_make_filter_complex()` (serve.py) gained an `image_layers` param: each layer becomes its own ffmpeg `-i` input, composited via the `overlay` filter with `enable='between(t,start,end)'` gating its visible window, chained after the ASS `subtitles=` stage. Forces the multi-input filter_complex path even for a single segment (the plain single-segment `-vf` chain has no way to take multiple inputs). Same "force burn_captions on if any exist" pattern as text layers, threaded as `image_layers_json` through the full export chain. JS flattens `layer.style.{posX,posY,posZ}` to top-level fields before sending — `_make_filter_complex()` reads them directly, not nested
+- `pick_image()` (serve.py) — native image picker; previews stream through the same generic `/video?path=` file server as video clips (its mime map gained png/jpg/jpeg/gif/webp — the endpoint already streamed arbitrary local files, it just needed the right Content-Type for browsers to render an `<img>`)
+- Persists per-clip and through undo/redo, same pattern as text layers; also excluded from UGC Templates for the same reason (actual per-clip content, not a style/settings preset)
+
 ## handleTLClick — Source Time Mapping (CRITICAL)
 After `trimBefore`/`trimAfter`, segments have `timelineStart ≠ sourceStart`. Raw `x/zoom` gives wrong source time.
 Always map through segments:
@@ -621,7 +647,7 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
   - **Video** tab: Clip Info (now wrapped in `.info-card`) + Flip + Snapshot Frame
   - **Speed** tab: Rate select
   - **Captions** tab: full caption style block (font/weight/layout/size/color/stroke/position)
-  - **Text** tab: "Add Text" freeform text layer editor — content textarea + per-layer font/weight/size/color/stroke/position (see `js/ui/textlayers.js`). Empty state prompts "+ Add Text" when nothing is selected
+  - **Text** tab: shared by two independent object types — "Add Text" freeform text layers (content textarea + per-layer font/weight/size/color/stroke/position, `js/ui/textlayers.js`) and "+ Image" sticker/image overlays (preview thumbnail + position/scale only, `js/ui/imagelayers.js`). Selecting one clears the other's selection; combined empty state offers both "+ Add Text" and "+ Add Image" when nothing is selected
   - **Export**: the persistent footer block was removed (2026-07-26) — it duplicated the topbar Export button (Export Video) and the left-panel Captions tab's SRT/VTT buttons, and appeared under every insp-tab regardless of which was active, reading as if export lived in every tab. Export is now reached only via the topbar `⬆ Export` button → `#exportModal` (format/preset/burn-captions/aspect options). SRT/VTT export stays in the left-panel Captions tab only. Snapshot Frame moved into the Video insp-tab (still calls `exportFrame()`).
 - **Timeline toolbar:** flat row of individual pills (Select/Trim/Split/Trim Before/Merge Cuts/Trim After/Silence, then Snap/Snap Gaps) — no longer grouped in a boxed tray
 - **Playback bar:** wrapped in a floating `.pb-pill` capsule instead of a flat full-width strip. `#proxyBtn` (LIVE/PROXY toggle, `toggleProxyMode()`) sits right after Skip Cuts — see the PREVIEW PROXY section under js/playback/playback.js above

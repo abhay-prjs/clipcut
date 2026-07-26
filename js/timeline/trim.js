@@ -681,3 +681,87 @@ function _bindTextLayerDrag(el, layer){
     renderTimeline();
   });
 }
+
+// ═══════════════════════════════════════
+// ON-TIMELINE IMAGE LAYER DRAG ("+ Image" stickers) — identical grammar to
+// _bindTextLayerDrag() above; a separate function (not a shared parameter)
+// since image layers select/render through their own S.imageLayers-scoped
+// functions (js/ui/imagelayers.js), not the text-layer ones.
+// ═══════════════════════════════════════
+function _bindImageLayerDrag(el, layer){
+  const EDGE=8;
+  let mode=null, startX=0, startTlStart=0, startTlEnd=0, historySaved=false;
+
+  el.addEventListener('mousemove', e=>{
+    if(mode) return;
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    el.style.cursor = (offsetX<=EDGE||offsetX>=rect.width-EDGE) ? 'ew-resize' : 'grab';
+  });
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.stopPropagation();
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    mode = offsetX<=EDGE ? 'resize-l' : (offsetX>=rect.width-EDGE ? 'resize-r' : 'move');
+    startX=e.clientX;
+    startTlStart=sourceTimeToTimeline(layer.start);
+    startTlEnd=sourceTimeToTimeline(layer.end);
+    historySaved=false;
+    el.setPointerCapture(e.pointerId);
+    selectImageLayer(layer.id);
+  });
+
+  el.addEventListener('pointermove', e=>{
+    if(!mode) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    let deltaSec=(e.clientX-startX)/S.zoom;
+    if(e.shiftKey) deltaSec*=0.25;
+
+    const maxTl = sourceTimeToTimeline(S.duration||0) ?? (S.duration||0);
+    let newTlStart=startTlStart, newTlEnd=startTlEnd;
+    if(mode==='move'){
+      const dur=startTlEnd-startTlStart;
+      newTlStart=startTlStart+deltaSec; newTlEnd=startTlEnd+deltaSec;
+      if(newTlStart<0){ newTlStart=0; newTlEnd=dur; }
+      if(newTlEnd>maxTl){ newTlEnd=maxTl; newTlStart=maxTl-dur; }
+    } else if(mode==='resize-l'){
+      newTlStart=Math.max(0, Math.min(startTlStart+deltaSec, startTlEnd-0.1));
+    } else if(mode==='resize-r'){
+      newTlEnd=Math.min(maxTl, Math.max(startTlEnd+deltaSec, startTlStart+0.1));
+    }
+
+    if(!e.altKey){
+      const snapSec=6/S.zoom;
+      const targets=_cutSnapTargets(null);
+      const trySnap=(val)=>{
+        let best=val, bestDist=snapSec;
+        for(const t of targets){ const d=Math.abs(t-val); if(d<bestDist){bestDist=d;best=t;} }
+        const rounded=Math.round(val);
+        if(Math.abs(rounded-val)<bestDist) best=rounded;
+        return best;
+      };
+      if(mode==='move'){ const s=trySnap(newTlStart); newTlEnd+=(s-newTlStart); newTlStart=s; }
+      else if(mode==='resize-l') newTlStart=trySnap(newTlStart);
+      else if(mode==='resize-r') newTlEnd=trySnap(newTlEnd);
+    }
+
+    el.style.left=(newTlStart*S.zoom)+'px';
+    el.style.width=Math.max((newTlEnd-newTlStart)*S.zoom,20)+'px';
+    layer._dragTlStart=newTlStart; layer._dragTlEnd=newTlEnd;
+  });
+
+  el.addEventListener('pointerup', e=>{
+    if(!mode) return;
+    if(layer._dragTlStart!=null){
+      layer.start=timelineToSourceTime(layer._dragTlStart);
+      layer.end=timelineToSourceTime(layer._dragTlEnd);
+      delete layer._dragTlStart; delete layer._dragTlEnd;
+      if(video.src) video.currentTime=layer.start;
+      renderImageLayerInspector();
+    }
+    mode=null; historySaved=false;
+    renderTimeline();
+  });
+}

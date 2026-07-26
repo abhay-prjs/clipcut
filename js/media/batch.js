@@ -115,9 +115,10 @@ async function runBatchExport(){
       const segs = S.segments.length
         ? S.segments.map(s => ({start: s.sourceStart, end: s.sourceEnd}))
         : [{start: S.trimIn||0, end: S.trimOut||S.duration}];
-      // Forced on when text layers exist — same reasoning as _doPywebviewExport():
-      // "Add Text" only reaches the export through the ASS burn-in path.
-      const burnCap  = (typeof _exportBurnCap !== 'undefined' && _exportBurnCap) || S.textLayers.length>0;
+      // Forced on when text/image layers exist — same reasoning as
+      // _doPywebviewExport(): both only reach the export through the
+      // filter_complex path (ASS burn-in / ffmpeg overlay compositing).
+      const burnCap  = (typeof _exportBurnCap !== 'undefined' && _exportBurnCap) || S.textLayers.length>0 || S.imageLayers.length>0;
       const segMeta  = (burnCap && S.segments.length) ? gaplessSegmentMeta() : [];
 
       const result = await window.pywebview.api.export_video_batch_one(
@@ -135,7 +136,8 @@ async function runBatchExport(){
         burnCap ? JSON.stringify(S.textStyle) : '{}',
         burnCap ? (video.clientHeight||0) : 0,
         S.captionMode,
-        burnCap ? JSON.stringify(S.textLayers) : '[]'
+        burnCap ? JSON.stringify(S.textLayers) : '[]',
+        burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]'
       );
 
       if(!result?.success){

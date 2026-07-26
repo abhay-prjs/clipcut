@@ -33,10 +33,12 @@ function addTextLayer(){
   };
   S.textLayers.push(layer);
   S.selectedTextLayerId = layer.id;
+  S.selectedImageLayerId = null;
   renderTimeline();
   updateTextLayerOverlays(video.currentTime||0);
   switchInspTab('text');
   renderTextLayerInspector();
+  renderImageLayerInspector();
   toast('✓ Text added — edit it in the Text tab');
 }
 
@@ -49,14 +51,17 @@ function deleteTextLayer(id){
   renderTimeline();
   updateTextLayerOverlays(video.currentTime||0);
   renderTextLayerInspector();
+  renderImageLayerInspector();
   toast('✕ Text layer removed');
 }
 
 function selectTextLayer(id){
   S.selectedTextLayerId = id;
+  S.selectedImageLayerId = null; // mutually exclusive — the Text tab shows one editor at a time
   document.querySelectorAll('.tl-textlayer').forEach(el=>el.classList.toggle('selected', el.dataset.textId===id));
   switchInspTab('text');
   renderTextLayerInspector();
+  renderImageLayerInspector();
   const layer = S.textLayers.find(l=>l.id===id);
   if(layer && video.src) video.currentTime = layer.start;
 }
@@ -175,16 +180,22 @@ function updateTextLayerOverlays(srcTime){
 }
 
 // ── Inspector panel sync ────────────────────────────────────────────────
-function renderTextLayerInspector(){
+// Shared empty-state block (both text and image layer editors live in the
+// same "Text" inspector tab) — visible only when neither kind is selected.
+function _updateLayersEmptyState(){
   const empty = document.getElementById('textLayerEmpty');
+  if(!empty) return;
+  empty.style.display = (_selectedTextLayer() || _selectedImageLayer()) ? 'none' : '';
+}
+
+function renderTextLayerInspector(){
   const editor = document.getElementById('textLayerEditor');
   const layer = _selectedTextLayer();
+  _updateLayersEmptyState();
   if(!layer){
-    if(empty) empty.style.display='';
     if(editor) editor.style.display='none';
     return;
   }
-  if(empty) empty.style.display='none';
   if(editor) editor.style.display='';
 
   const set=(id,val)=>{const el=document.getElementById(id); if(el) el.value=val;};

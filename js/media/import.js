@@ -161,6 +161,7 @@ function selectClip(id) {
     S.current.trimIn = S.trimIn;
     S.current.trimOut = S.trimOut;
     S.current.textLayers = S.textLayers;
+    S.current.imageLayers = S.imageLayers;
   }
 
   // The rendered proxy belongs to whichever clip was active when it was
@@ -181,6 +182,8 @@ function selectClip(id) {
   S.markers   = c.markers || [];
   S.textLayers = c.textLayers || [];
   S.selectedTextLayerId = null;
+  S.imageLayers = c.imageLayers || [];
+  S.selectedImageLayerId = null;
   S.trimIn    = c.trimIn;
   S.trimOut   = c.trimOut;
   S.duration  = c.duration;
@@ -218,4 +221,5 @@ function selectClip(id) {
   updateTrimContext();
   renderTimeline();
   renderTextLayerInspector();
+  renderImageLayerInspector();
 }

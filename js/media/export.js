@@ -99,11 +99,12 @@ async function _doPywebviewExport(){
   // may currently hold real pre-snap gaps (gap-hatching), which would
   // desync burned-in caption timing from the actual export.
   const segMeta = S.segments.length ? gaplessSegmentMeta() : [];
-  // "Add Text" layers only reach the exported video through the ASS burn-in
-  // path — force it on when any exist, even if the user never toggled
-  // Burn-in Captions, so text added on the timeline doesn't silently vanish
-  // from the export.
-  const burnCap = _exportBurnCap || S.textLayers.length>0;
+  // "Add Text" layers and image/sticker overlays only reach the exported
+  // video through the filter_complex path (ASS burn-in for text, ffmpeg
+  // overlay compositing for images) — force it on when either exists, even
+  // if the user never toggled Burn-in Captions, so neither silently
+  // vanishes from the export.
+  const burnCap = _exportBurnCap || S.textLayers.length>0 || S.imageLayers.length>0;
 
   _setExportUI('running');
   _setExportLabel('Opening save dialog…');
@@ -127,7 +128,10 @@ async function _doPywebviewExport(){
       burnCap ? JSON.stringify(S.textStyle) : '{}',
       burnCap ? (video.clientHeight||0) : 0,
       S.captionMode,
-      burnCap ? JSON.stringify(S.textLayers) : '[]'
+      burnCap ? JSON.stringify(S.textLayers) : '[]',
+      // Flattened {path,start,end,posX,posY,posZ} — _make_filter_complex()
+      // (serve.py) reads these fields directly, not nested under .style.
+      burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]'
     );
 
     if(!result || result.error === 'cancelled') {

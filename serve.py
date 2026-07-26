@@ -277,7 +277,14 @@ def _aspect_filter(aspect, mode):
     h = f"trunc(min(ih,iw*{th}/{tw})/2)*2"
     return f"crop='{w}':'{h}'"
 
-def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter=''):
+def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter='',
+                         image_layers=None, seg_meta=None, out_w=0, out_h=0):
+    """image_layers: [{path,start,end,posX,posY,posZ}] (source time) — each
+    becomes its own ffmpeg input (index 1, 2, ... — video source is input 0)
+    plus an overlay stage gated by enable='between(t,...)' so it only shows
+    for its [start,end] window on the (already gapless, post-concat)
+    timeline. seg_meta maps source time -> that timeline the same way
+    caption/text-layer burn-in does."""
     parts = []
     for i, seg in enumerate(segments):
         s, e = round(seg["start"], 3), round(seg["end"], 3)
@@ -291,6 +298,30 @@ def _make_filter_complex(segments, flip_filter, sub_path=None, aspect_filter='')
         esc = sub_path.replace("\\", "/").replace(":", "\\:")
         parts.append(f"[outv]subtitles='{esc}'[subv]")
         out_v = "[subv]"
+    if image_layers:
+        def src_to_tl(t):
+            for seg in (seg_meta or []):
+                if seg["sourceStart"] <= t <= seg["sourceEnd"]:
+                    return seg["timelineStart"] + (t - seg["sourceStart"])
+            return None
+        for idx, layer in enumerate(image_layers):
+            ts = src_to_tl(layer["start"])
+            if ts is None:
+                continue
+            te = src_to_tl(layer["end"])
+            if te is None:
+                te = ts + (layer["end"] - layer["start"])
+            scale_factor = layer.get("posZ") or 1.0
+            disp_w = max(2, int((out_w or 1080) * 0.3 * scale_factor))  # default sticker width ~30% of frame, scaled by posZ
+            px = (layer.get("posX") if layer.get("posX") is not None else 50) / 100 * (out_w or 1080)
+            py = (layer.get("posY") if layer.get("posY") is not None else 50) / 100 * (out_h or 1920)
+            img_input_idx = idx + 1  # input 0 is the source video
+            parts.append(f"[{img_input_idx}:v]scale={disp_w}:-1[img{idx}]")
+            parts.append(
+                f"{out_v}[img{idx}]overlay=x='{px:.1f}-w/2':y='{py:.1f}-h/2'"
+                f":enable='between(t,{ts:.3f},{te:.3f})'[ov{idx}]"
+            )
+            out_v = f"[ov{idx}]"
     if aspect_filter:
         parts.append(f"{out_v}{aspect_filter}[av]")
         out_v = "[av]"
@@ -542,7 +573,11 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 
         ext  = os.path.splitext(file_path)[1].lower().lstrip('.')
         mime = {'mp4':'video/mp4','mov':'video/quicktime','mkv':'video/x-matroska',
-                'webm':'video/webm','m4v':'video/mp4','avi':'video/x-msvideo'}.get(ext, 'application/octet-stream')
+                'webm':'video/webm','m4v':'video/mp4','avi':'video/x-msvideo',
+                # Same generic /video?path= streamer also backs sticker/image-overlay
+                # previews (js/ui/imagelayers.js) — no separate endpoint needed.
+                'png':'image/png','jpg':'image/jpeg','jpeg':'image/jpeg',
+                'gif':'image/gif','webp':'image/webp'}.get(ext, 'application/octet-stream')
         size = os.path.getsize(file_path)
         rng  = self.headers.get('Range', '')
 
@@ -615,6 +650,22 @@ class API:
             log('DIALOG', f'✓ File selected: {path}  ({size_mb:.1f} MB)')
         else:
             log('DIALOG', 'File picker cancelled')
+        return path
+
+    def pick_image(self):
+        """Native image file open dialog — backs the sticker/image-overlay
+        feature ("+ Image" on the timeline toolbar). Returns absolute path or None."""
+        log('DIALOG', 'pick_image() — opening native file picker')
+        result = webview.windows[0].create_file_dialog(
+            webview.FileDialog.OPEN,
+            file_types=('Image Files (*.png;*.jpg;*.jpeg;*.gif;*.webp)',)
+        )
+        path = result[0] if result else None
+        if path:
+            size_mb = os.path.getsize(path) / 1_048_576
+            log('DIALOG', f'✓ Image selected: {path}  ({size_mb:.1f} MB)')
+        else:
+            log('DIALOG', 'Image picker cancelled')
         return path
 
     def pick_folder(self):
@@ -1188,7 +1239,7 @@ class API:
                      burn_captions=False, captions_json='[]', seg_meta_json='[]',
                      aspect='', aspect_mode='crop',
                      text_style_json='{}', preview_height_px=0,
-                     caption_mode='static', text_layers_json='[]'):
+                     caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
         """
         Open native Save dialog, encode directly to disk with ffmpeg.
 
@@ -1202,7 +1253,9 @@ class API:
             the burned-in captions match S.textStyle from the Captions
             inspector tab instead of always rendering plain SRT text;
             text_layers_json carries "Add Text" freeform objects, each with
-            its own style)
+            its own style) plus ffmpeg overlay compositing for sticker/image
+            layers (image_layers_json — each becomes its own ffmpeg input,
+            forces the filter_complex path even for a single segment)
 
         aspect: target ratio like '9/16', or '' to export at source aspect
         (bug #21 — export previously ignored the preview's aspect entirely).
@@ -1215,7 +1268,7 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode, text_layers_json
+                caption_mode, text_layers_json, image_layers_json
             )
         except Exception as exc:
             import traceback
@@ -1228,7 +1281,7 @@ class API:
                             burn_captions, captions_json, seg_meta_json,
                             aspect='', aspect_mode='crop',
                             text_style_json='{}', preview_height_px=0,
-                            caption_mode='static', text_layers_json='[]'):
+                            caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
         log('EXPORT', 'Opening native Save dialog...')
         save_path = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
@@ -1249,7 +1302,7 @@ class API:
             burn_captions, captions_json, seg_meta_json,
             aspect, aspect_mode,
             text_style_json, preview_height_px,
-            caption_mode, text_layers_json
+            caption_mode, text_layers_json, image_layers_json
         )
 
     def export_video_batch_one(self, source_path, segments_json, save_path,
@@ -1257,7 +1310,7 @@ class API:
                                burn_captions=False, captions_json='[]', seg_meta_json='[]',
                                aspect='', aspect_mode='crop',
                                text_style_json='{}', preview_height_px=0,
-                               caption_mode='static', text_layers_json='[]'):
+                               caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
         """Same encode core as export_video(), but takes save_path directly
         instead of opening a native Save dialog — batch export (js/media/batch.js)
         picks one destination folder up front via pick_folder() and computes
@@ -1271,7 +1324,7 @@ class API:
                 burn_captions, captions_json, seg_meta_json,
                 aspect, aspect_mode,
                 text_style_json, preview_height_px,
-                caption_mode, text_layers_json
+                caption_mode, text_layers_json, image_layers_json
             )
         except Exception as exc:
             import traceback
@@ -1284,7 +1337,7 @@ class API:
                            burn_captions, captions_json, seg_meta_json,
                            aspect='', aspect_mode='crop',
                            text_style_json='{}', preview_height_px=0,
-                           caption_mode='static', text_layers_json='[]'):
+                           caption_mode='static', text_layers_json='[]', image_layers_json='[]'):
         self._export_cancelled = False
 
         log('EXPORT', f'source:       {source_path}')
@@ -1317,7 +1370,8 @@ class API:
                 source_path, segments, save_path, p, flip_filter,
                 json.loads(captions_json), json.loads(seg_meta_json), aspect_filter,
                 json.loads(text_style_json or '{}'), preview_height_px,
-                aspect, aspect_mode, caption_mode, json.loads(text_layers_json or '[]')
+                aspect, aspect_mode, caption_mode, json.loads(text_layers_json or '[]'),
+                json.loads(image_layers_json or '[]')
             )
 
         t_start = time.time()
@@ -1516,15 +1570,24 @@ class API:
 
     def _export_burnin(self, source_path, segments, save_path, p, flip_filter, captions, seg_meta,
                        aspect_filter='', text_style=None, preview_height_px=0,
-                       aspect='', aspect_mode='crop', caption_mode='static', text_layers=None):
-        """filter_complex single-pass with styled ASS caption + text-layer burn-in."""
+                       aspect='', aspect_mode='crop', caption_mode='static', text_layers=None,
+                       image_layers=None):
+        """filter_complex single-pass with styled ASS caption + text-layer
+        burn-in, plus image/sticker overlay compositing. Image layers force
+        the multi-input filter_complex path even for a single segment —
+        ffmpeg's overlay filter needs one input per image, which the plain
+        single-segment -vf chain has no way to express."""
         total_dur = sum(seg['end'] - seg['start'] for seg in segments)
         total_us  = int(total_dur * 1_000_000)
+        image_layers = image_layers or []
+
+        out_w = out_h = 0
+        if seg_meta and (captions or text_layers or image_layers):
+            out_w, out_h = _compute_output_dims(source_path, aspect, aspect_mode)
 
         ass_path = None
         try:
             if seg_meta and (captions or text_layers):
-                out_w, out_h = _compute_output_dims(source_path, aspect, aspect_mode)
                 log('EXPORT', f'Generating ASS ({len(captions)} captions, {len(text_layers or [])} text layers, {out_w}x{out_h}, mode={caption_mode})...')
                 ass = _generate_ass(captions, seg_meta, text_style or {}, preview_height_px, out_w, out_h, caption_mode, text_layers)
                 tmp = tempfile.NamedTemporaryFile(
@@ -1538,8 +1601,18 @@ class API:
             log('EXPORT', f'ASS generation failed: {e}')
 
         prog_flags = ['-progress', 'pipe:1', '-nostats', '-threads', '0']
+        image_inputs = []
+        for layer in image_layers:
+            path = layer.get('path')
+            if path and os.path.isfile(path):
+                image_inputs.append(['-i', path])
+            else:
+                log('EXPORT', f'✕ Skipping image layer — file not found: {path}')
+        # Drop layers whose file didn't exist, keeping image_inputs and
+        # image_layers in sync (both indexed the same way in _make_filter_complex)
+        image_layers = [l for l in image_layers if l.get('path') and os.path.isfile(l.get('path'))]
 
-        if len(segments) == 1:
+        if len(segments) == 1 and not image_layers:
             seg = segments[0]
             dur = round(seg['end'] - seg['start'], 3)
             vf  = []
@@ -1556,9 +1629,12 @@ class API:
             cmd_gpu = base + vf_args + _nvenc_args(p) + ['-c:a', 'aac', save_path]
             cmd_cpu = base + vf_args + _x264_args(p)  + ['-c:a', 'aac', save_path]
         else:
-            base           = ['ffmpeg', '-y', '-i', source_path] + prog_flags
-            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter)
-            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter)
+            image_input_flags = [f for pair in image_inputs for f in pair]
+            base = ['ffmpeg', '-y', '-i', source_path] + image_input_flags + prog_flags
+            fc_gpu, ov_gpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter,
+                                                  image_layers, seg_meta, out_w, out_h)
+            fc_cpu, ov_cpu = _make_filter_complex(segments, flip_filter, ass_path, aspect_filter,
+                                                  image_layers, seg_meta, out_w, out_h)
             cmd_gpu = (base + ['-filter_complex', fc_gpu, '-map', ov_gpu, '-map', '[outa]']
                        + _nvenc_args(p) + ['-c:a', 'aac', save_path])
             cmd_cpu = (base + ['-filter_complex', fc_cpu, '-map', ov_cpu, '-map', '[outa]']

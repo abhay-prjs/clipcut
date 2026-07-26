@@ -52,6 +52,13 @@ const S = {
   // not shared. See js/ui/textlayers.js.
   textLayers: [],
   selectedTextLayerId: null,
+  // Sticker/image overlays ("+ Image") — {id, path (absolute local file),
+  // url (http://localhost:8080/video?path=... for preview), start, end
+  // (source time), style:{posX,posY,posZ}}. Export composites via ffmpeg's
+  // overlay filter (_make_filter_complex in serve.py), not the ASS pipeline
+  // (ASS is text-only) — see js/ui/imagelayers.js.
+  imageLayers: [],
+  selectedImageLayerId: null,
   // Caption overlay styling — source of truth (bug #10). Previously these
   // lived only as inline styles on #captionOverlay: not undoable, not
   // persisted, and (still, pending the ASS burn-in pipeline) not passed to
