@@ -44,33 +44,6 @@ function _mergeCaptionsIntoStrip(caps){
   return out;
 }
 
-// Group adjacent word-chunk captions into sentence-level blocks (closes on
-// .!? or a >1s gap) — the default mid-zoom timeline caption granularity.
-// Also force-closes on a max word count / max span so unpunctuated transcripts
-// (raw Whisper output often has no '.!?' at all) can't merge into one giant
-// block covering most of the clip.
-const _SENTENCE_MAX_WORDS = 10;
-const _SENTENCE_MAX_SPAN = 4; // seconds
-function _groupCaptionsIntoSentences(caps){
-  const sorted=[...caps].sort((a,b)=>a.start-b.start);
-  const groups=[]; let cur=null, curWords=0;
-  for(const c of sorted){
-    if(!cur || c.start-cur.end>1){
-      if(cur) groups.push(cur);
-      cur={start:c.start,end:c.end,text:c.text}; curWords=1;
-    } else {
-      cur.end=c.end;
-      cur.text+=' '+c.text;
-      curWords++;
-    }
-    const last=(cur.text||'').trim().slice(-1);
-    const forceClose=curWords>=_SENTENCE_MAX_WORDS || (cur.end-cur.start)>=_SENTENCE_MAX_SPAN;
-    if(last==='.'||last==='!'||last==='?'||forceClose){ groups.push(cur); cur=null; curWords=0; }
-  }
-  if(cur) groups.push(cur);
-  return groups;
-}
-
 function buildDemoCaptions(dur){
   const lines=["Welcome back to the channel!","Today's content is gonna be crazy.","I literally couldn't believe this worked.","Step one — let me break it down for you.","No cap this is the best one yet.","Make sure you stick around till the end.","Drop a comment if this helped you out.","Like and subscribe for more content!"];
   const seg=dur/Math.min(lines.length,Math.ceil(dur/3));
@@ -218,9 +191,49 @@ function _startEditWord(span) {
       span.textContent = originalText; // Escape — revert
     }
   };
+
+  // Enter with the cursor placed mid-text splits this caption block into two —
+  // each half becomes its own caption/timeline block. Word-level timestamps
+  // don't survive chunking, so the split point in time is a character-length
+  // proportion of the original span — a reasonable proxy, not frame-exact.
+  // Enter with everything still selected (the auto-select-all on double-click,
+  // untouched) or at a text edge falls through to the old commit behavior.
+  const trySplit = () => {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !span.contains(range.startContainer)) return false;
+    const fullText = span.textContent;
+    const offset = range.startContainer.nodeType === Node.TEXT_NODE
+      ? range.startOffset
+      : (range.startOffset === 0 ? 0 : fullText.length);
+    const leftText  = fullText.slice(0, offset).trim();
+    const rightText = fullText.slice(offset).trim();
+    if (!leftText || !rightText) return false;
+
+    span.removeEventListener('blur', onBlur);
+    span.removeEventListener('keydown', onKeydown);
+    span.contentEditable = 'false';
+    span.classList.remove('word-editing');
+
+    saveHistory();
+    const dur   = cap.end - cap.start;
+    const ratio = leftText.length / (leftText.length + rightText.length);
+    const splitAt = cap.start + dur * ratio;
+    const newCap = { id: crypto.randomUUID(), text: rightText, start: splitAt, end: cap.end };
+    cap.text = leftText;
+    cap.end  = splitAt;
+    S.captions.splice(S.captions.indexOf(cap) + 1, 0, newCap);
+
+    updateCaptionList();
+    renderTimeline();
+    toast('✂ Caption split into two');
+    return true;
+  };
+
   const onBlur = () => finish(true);
   const onKeydown = e => {
-    if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (!trySplit()) span.blur(); }
     else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   };
   span.addEventListener('blur', onBlur);

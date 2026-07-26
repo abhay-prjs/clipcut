@@ -161,16 +161,16 @@ function renderTimeline(){
   updateCutBadge();
 
   // ── CAPTION TRACK ───────────────────────────────────────────
-  // Zoom-aware granularity (Part C4/C5): word-level chunks are unreadable at
-  // normal zoom (forced min-width made every chip overlap). Sentence-level is
-  // the default; word-level only above ~150px/s; a merged solid strip (no
-  // text) below ~30px/s.
+  // One block per S.captions entry — the same unit the transcript tab edits
+  // (word-chunks, or whatever a manual split/merge in the transcript editor
+  // produced) — so what you see here is exactly what you see there, and each
+  // block is individually draggable/resizable. Below ~15px/s a real block
+  // would be a sliver anyway, so fall back to a merged solid strip purely for
+  // readability (no editing available at that zoom).
   const ct=document.getElementById('captionTrack'); ct.innerHTML='';
   const ctFrag=document.createDocumentFragment();
-  let capItems;
-  if(zoom<30) capItems=_mergeCaptionsIntoStrip(S.captions);
-  else if(zoom>=150) capItems=S.captions.map(c=>({start:c.start,end:c.end,text:c.text}));
-  else capItems=_groupCaptionsIntoSentences(S.captions);
+  const _capMerged = zoom<15;
+  const capItems = _capMerged ? _mergeCaptionsIntoStrip(S.captions) : S.captions;
 
   capItems.forEach((c,i)=>{
     const tlStart=sourceTimeToTimeline(c.start);
@@ -195,6 +195,7 @@ function renderTimeline(){
     } else {
       el.title='Speech';
     }
+    if(!_capMerged) _bindCaptionDrag(el, c);
     ctFrag.appendChild(el);
   });
   ct.appendChild(ctFrag);

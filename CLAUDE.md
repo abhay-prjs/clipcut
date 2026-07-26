@@ -187,6 +187,7 @@ python serve.py
 All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `open_file()` → native file picker (`webview.FileDialog.OPEN`), returns absolute path
 - `pick_folder()` → native folder picker (`webview.FileDialog.FOLDER`), returns path
+- `list_video_files(folder_path)` → top-level-only scan (no subfolder recursion) for video files, returns sorted absolute paths — backs the "📁 Import Folder" button (`onImportFolderClick()` in `js/media/import.js`), which links every file in the folder via the normal `loadClipFromPath()` pipeline (real `sourcePath`, no upload)
 - `probe_duration(source_path)` → ffprobe duration in seconds (for unplayable containers)
 - `ping()` → loads transcription model (backend-dependent) + Silero VAD (lazy singletons), returns `{online, model, device, backend}`
 - `transcribe(source_path)` → ffmpeg audio extract + transcription. Returns `{words, language, duration, backend}` + optional `retake_cuts` when backend=whisperx
@@ -344,8 +345,9 @@ Every detected issue uses this shape — do NOT deviate:
 **js/core/state.js** — S object, _clipRegistry, video/ph/tArea
 
 **js/core/history.js**
-- `saveHistory()` — call BEFORE every destructive action. Snapshots: clips, captions, trimIn, trimOut, cuts, segments, markers, aspect, aspectMode, textStyle
-- `undo()` / `redo()` — two-stack undo/redo system
+- `saveHistory()` — call BEFORE every destructive action. Snapshots: clips, captions, trimIn, trimOut, cuts, segments, markers, aspect, aspectMode, textStyle. No-ops while `_historySuppressed` is true.
+- `withHistoryBatch(async fn)` — snapshots once, suppresses nested `saveHistory()` calls for the duration of `fn`, restores in `finally`. Used by `runAutoMode()` so Auto/Deep Mode's whole chain (transcribe → detect → AI analysis, each of which also calls `saveHistory()` when triggered standalone) is one undo checkpoint, not one per internal step.
+- `undo()` / `redo()` — two-stack undo/redo system. Every action that mutates `S.cuts`/`S.captions`/`S.segments` must call `saveHistory()` first — `detectDeadSpaces`, `detectFillers`, `analyzeAudio`, `runAIScriptAnalysis`, `runAIAnalysis`, `toggleCutSelected`, `toggleCutSkip`, `toggleScriptPart` all do. Skipping this on any mutating action is the bug class that made Undo appear to "skip" straight past a manual edit back to an earlier state — the popped snapshot is always whatever the *last* `saveHistory()` call captured, so a silent mutator leaves stale snapshots on top of the stack.
 
 **js/core/project.js**
 - `serializeProject()` — builds a `.ccproj`-shaped object: clip sourcePaths + per-clip segments/cuts/captions/markers, aspect/aspectMode/textStyle, zoom. Skips clips without `sourcePath` and `waveformData` (re-extracted on load)
@@ -361,6 +363,8 @@ Every detected issue uses this shape — do NOT deviate:
 **js/captions/captions.js**
 - `exportCaptions(fmt)` — SRT/VTT export with post-cut timestamp remapping; `fmt` is `'srt'` or `'vtt'`
 - `updateCaptionList()`, `updateCaptionOverlay()` — caption UI
+- `_startEditWord(span)` — double-click a transcript-tab caption block to edit its text. Enter with the cursor placed mid-text (not on the auto-select-all state) **splits the block into two captions** at that character position — time split is a character-length proportion of the original span's duration (word-level timestamps don't survive chunking, so this is a proxy, not frame-exact). Enter with everything still selected, or at a text edge, falls through to the old commit-on-Enter behavior. Escape reverts, blur commits.
+- `_mergeCaptionsIntoStrip(caps)` — merges adjacent captions (gap <0.3s) into a solid no-text strip; only used by the timeline caption track below ~15px/s zoom (readability fallback, not editable)
 
 **js/captions/whisper.js**
 - `transcribeWithWhisper()` — calls pywebview.api.transcribe(sourcePath), requires clip.sourcePath
@@ -404,6 +408,7 @@ Every detected issue uses this shape — do NOT deviate:
 - `loadClipFromPath(sourcePath)` — native import path. Builds HTTP URL, probes duration via ffprobe if browser can't decode
 - `onUploadZoneClick()` — routes to openFileNative() in pywebview, fileInput.click() in browser
 - `openFileNative()` — calls pywebview.api.open_file(), passes path to loadClipFromPath()
+- `onImportFolderClick()` — "📁 Import Folder" button (Media tab, pywebview only). `pick_folder()` → `list_video_files()` → `loadClipFromPath()` for every file found (top-level only, no subfolder recursion) — links a whole folder of clips in one go via the same native-path pipeline as a single Open File import
 
 **js/media/export.js**
 - `startExport()` — routes to pywebview or Flask export based on context
@@ -426,6 +431,8 @@ Every detected issue uses this shape — do NOT deviate:
 - `trimAfter()` — immediately chops everything after playhead: sets S.trimOut, calls `_applyTrimToSegments` → `sliceWaveforms` → `renderTimeline`
 - `splitAtPlayhead()` — splits selected clip at current playhead position
 - `_applyTrimToSegments(tIn, tOut)` — clamps S.segments to [tIn, tOut], recalculates timelineStart offsets
+- `_bindCutDrag(el, cut)` — on-timeline cut edge-resize/move drag (§C6): edges resize, center moves, snaps to word/cut/segment/playhead/whole-second edges, Alt=no-snap, Shift=0.25× fine
+- `_bindCaptionDrag(el, cap)` — same edge-resize/move drag grammar applied to a caption block on the timeline caption track, so retiming a caption doesn't require the transcript tab. Clamps directly against neighboring captions (`_captionNeighborBounds`) rather than width-clamping, since captions must stay gapless/non-overlapping. Not bound on the low-zoom merged strip (nothing to drag — see `_mergeCaptionsIntoStrip` in captions.js)
 
 **js/timeline/timeline.js**
 - `renderTimeline()` — redraws entire timeline. ALWAYS re-appends playhead (`ph`) as last child of `tracksInner` at end

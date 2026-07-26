@@ -403,3 +403,97 @@ function _bindCutDrag(el, cut){
     renderTimeline();
   });
 }
+
+// ═══════════════════════════════════════
+// ON-TIMELINE CAPTION DRAGGING — same edge-resize/move grammar as cuts (§C6/F1),
+// applied to caption blocks so retiming a caption doesn't require reopening the
+// transcript tab. Neighbors are clamped directly (adjacent captions must stay
+// gapless/non-overlapping) instead of relying on width-clamping like the
+// read-only render path does.
+// ═══════════════════════════════════════
+function _captionNeighborBounds(cap){
+  const idx=S.captions.indexOf(cap);
+  const prevEnd  = idx>0 ? S.captions[idx-1].end : 0;
+  const nextStart= idx<S.captions.length-1 ? S.captions[idx+1].start : Infinity;
+  return {prevEnd, nextStart};
+}
+
+function _bindCaptionDrag(el, cap){
+  const EDGE=8;
+  let mode=null, startX=0, startTlStart=0, startTlEnd=0, historySaved=false;
+
+  el.addEventListener('mousemove', e=>{
+    if(mode) return;
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    el.style.cursor = (offsetX<=EDGE||offsetX>=rect.width-EDGE) ? 'ew-resize' : 'grab';
+  });
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.stopPropagation();
+    const rect=el.getBoundingClientRect();
+    const offsetX=e.clientX-rect.left;
+    mode = offsetX<=EDGE ? 'resize-l' : (offsetX>=rect.width-EDGE ? 'resize-r' : 'move');
+    startX=e.clientX;
+    startTlStart=sourceTimeToTimeline(cap.start);
+    startTlEnd=sourceTimeToTimeline(cap.end);
+    historySaved=false;
+    el.setPointerCapture(e.pointerId);
+  });
+
+  el.addEventListener('pointermove', e=>{
+    if(!mode) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    let deltaSec=(e.clientX-startX)/S.zoom;
+    if(e.shiftKey) deltaSec*=0.25;
+
+    const {prevEnd, nextStart}=_captionNeighborBounds(cap);
+    const minTlStart = sourceTimeToTimeline(prevEnd) ?? 0;
+    const maxTlEnd   = nextStart===Infinity ? Infinity : (sourceTimeToTimeline(nextStart) ?? Infinity);
+
+    let newTlStart=startTlStart, newTlEnd=startTlEnd;
+    if(mode==='move'){
+      const dur=startTlEnd-startTlStart;
+      newTlStart=startTlStart+deltaSec; newTlEnd=startTlEnd+deltaSec;
+      if(newTlStart<minTlStart){ newTlStart=minTlStart; newTlEnd=newTlStart+dur; }
+      if(newTlEnd>maxTlEnd){ newTlEnd=maxTlEnd; newTlStart=newTlEnd-dur; }
+    } else if(mode==='resize-l'){
+      newTlStart=Math.max(minTlStart, Math.min(startTlStart+deltaSec, startTlEnd-0.1));
+    } else if(mode==='resize-r'){
+      newTlEnd=Math.min(maxTlEnd, Math.max(startTlEnd+deltaSec, startTlStart+0.1));
+    }
+    newTlStart=Math.max(0,newTlStart);
+
+    if(!e.altKey){
+      const snapSec=6/S.zoom;
+      const targets=_cutSnapTargets(null);
+      const trySnap=(val)=>{
+        let best=val, bestDist=snapSec;
+        for(const t of targets){ const d=Math.abs(t-val); if(d<bestDist){bestDist=d;best=t;} }
+        const rounded=Math.round(val);
+        if(Math.abs(rounded-val)<bestDist) best=rounded;
+        return best;
+      };
+      if(mode==='move'){ const s=trySnap(newTlStart); newTlEnd+=(s-newTlStart); newTlStart=s; }
+      else if(mode==='resize-l') newTlStart=trySnap(newTlStart);
+      else if(mode==='resize-r') newTlEnd=trySnap(newTlEnd);
+    }
+
+    el.style.left=(newTlStart*S.zoom)+'px';
+    el.style.width=Math.max((newTlEnd-newTlStart)*S.zoom,4)+'px';
+    cap._dragTlStart=newTlStart; cap._dragTlEnd=newTlEnd;
+  });
+
+  el.addEventListener('pointerup', e=>{
+    if(!mode) return;
+    if(cap._dragTlStart!=null){
+      cap.start=timelineToSourceTime(cap._dragTlStart);
+      cap.end=timelineToSourceTime(cap._dragTlEnd);
+      delete cap._dragTlStart; delete cap._dragTlEnd;
+      if(video.src) video.currentTime=cap.start;
+    }
+    mode=null; historySaved=false;
+    renderTimeline();
+  });
+}
