@@ -819,22 +819,25 @@
   <div class="timeline-header">
     <span class="tl-title">Timeline</span>
     <div class="dv"></div>
-    <div class="zoom-btn" onclick="zoomTL(-1)">−</div>
-    <div class="zoom-btn" onclick="zoomTL(1)">+</div>
-    <div class="dv"></div>
     <button class="tool-btn active" id="selectTool" style="height:24px;font-size:10px">Select</button>
     <button class="tool-btn" id="trimTool" style="height:24px;font-size:10px">Trim</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="splitAtPlayhead()" title="Ctrl+B">Split</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimBefore()" title="Q">Trim Before</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="mergeCuts()" title="Merge overlapping/adjacent cuts of the same type">Merge Cuts</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="trimAfter()" title="W">Trim After</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" id="silVisBtn" onclick="toggleSilenceVis()">Silence</button>
     <div class="dv"></div>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="addTextLayer()" title="Add a freeform text object at the playhead">+ Text</button>
-    <button class="tool-btn" style="height:24px;font-size:10px" onclick="addImageLayer()" title="Add a sticker/image overlay at the playhead">+ Image</button>
+    <button class="tl-icon-btn" onclick="splitAtPlayhead()" title="Split at Playhead (Ctrl+B)">✂</button>
+    <button class="tl-icon-btn" onclick="trimBefore()" title="Trim Before (Q)">⇤</button>
+    <button class="tl-icon-btn" onclick="mergeCuts()" title="Merge overlapping/adjacent cuts of the same type">🔗</button>
+    <button class="tl-icon-btn" onclick="trimAfter()" title="Trim After (W)">⇥</button>
+    <button class="tl-icon-btn" id="silVisBtn" onclick="toggleSilenceVis()" title="Toggle silence visualisation">👁</button>
+    <div class="dv"></div>
+    <button class="tl-icon-btn" onclick="addTextLayer()" title="Add Text — freeform text object at the playhead">Aa</button>
+    <button class="tl-icon-btn" onclick="addImageLayer()" title="Add Image — sticker/image overlay at the playhead">🖼</button>
     <div class="dv"></div>
     <button class="toggle-chip" style="height:24px" onclick="snapPlayhead()">Snap</button>
     <button class="toggle-chip" style="height:24px" onclick="snapGaps()">Snap Gaps</button>
+    <div style="flex:1"></div>
+    <div class="tl-zoom-group">
+      <div class="zoom-btn" onclick="zoomTL(-1)" title="Zoom out">−</div>
+      <div class="zoom-btn" onclick="zoomTL(1)" title="Zoom in">+</div>
+    </div>
   </div>
   <div class="tl-body">
     <div class="track-labels">
