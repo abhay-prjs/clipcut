@@ -17,7 +17,7 @@ Restore point snapshots live in `_backups/`. Each folder is a full copy of all s
 
 ### How to revert to a restore point
 ```bash
-# Replace working files with a snapshot (run from home_editor/)
+# Replace working files with a snapshot (run from the repo root)
 cp -r _backups/restore_2026-07-26/js ./js
 cp _backups/restore_2026-07-26/clipcut.html .
 cp _backups/restore_2026-07-26/clipcut.css .
@@ -51,7 +51,9 @@ talking-head video editing workflow. Single operator tool —
 not a general purpose editor.
 
 ## File Structure
-home_editor/
+Files live at the repo root (not under a `home_editor/` subdirectory — older
+docs/backups predating the 2026-07-26 rename may still say otherwise).
+```
 ├── clipcut.html            # HTML structure only
 ├── clipcut.css             # All styles
 ├── editor.js               # LEGACY MONOLITH — kept as backup, not loaded by HTML
@@ -64,7 +66,8 @@ home_editor/
     ├── core/
     │   ├── logger.js       # jlog(), window.onerror, console.error override — LOAD FIRST
     │   ├── state.js        # S object, _clipRegistry, video/ph/tArea DOM refs — LOAD SECOND
-    │   └── history.js      # saveHistory(), undo(), redo(), _applySnapshot()
+    │   ├── history.js      # saveHistory(), undo(), redo(), _applySnapshot()
+    │   └── project.js      # serializeProject(), saveProject(), openProject(), autosave + startup recovery
     ├── config/
     │   └── config.js       # loadConfig(), updateConfigStatus(), setAiSource()
     ├── captions/
@@ -103,7 +106,9 @@ js/playback/playback.js
 js/timeline/trim.js
 js/timeline/timeline.js
 js/core/history.js
+js/core/project.js
 js/ui/ui.js
+js/ui/settings.js
 js/main.js              ← must be last (calls renderTimeline etc.)
 ```
 
@@ -339,8 +344,15 @@ Every detected issue uses this shape — do NOT deviate:
 **js/core/state.js** — S object, _clipRegistry, video/ph/tArea
 
 **js/core/history.js**
-- `saveHistory()` — call BEFORE every destructive action. Snapshots: clips, captions, trimIn, trimOut, cuts, segments, markers
+- `saveHistory()` — call BEFORE every destructive action. Snapshots: clips, captions, trimIn, trimOut, cuts, segments, markers, aspect, aspectMode, textStyle
 - `undo()` / `redo()` — two-stack undo/redo system
+
+**js/core/project.js**
+- `serializeProject()` — builds a `.ccproj`-shaped object: clip sourcePaths + per-clip segments/cuts/captions/markers, aspect/aspectMode/textStyle, zoom. Skips clips without `sourcePath` and `waveformData` (re-extracted on load)
+- `saveProject()` / `openProject()` — native Save/Open dialogs via `pywebview.api.save_project()`/`open_project()`
+- `_loadProjectData(data)` — shared rebuild-and-select logic used by `openProject()` and autosave recovery
+- `_startAutosave()` — 30s `setInterval` calling `pywebview.api.autosave_project()`
+- `_checkAutosaveRecovery()` — called once at startup; offers to restore a found autosave via `confirm()`
 
 **js/config/config.js**
 - `loadConfig()` — fetches config.json, populates S.orKey, S.orModel etc.
