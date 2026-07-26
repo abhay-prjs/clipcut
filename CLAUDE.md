@@ -514,10 +514,10 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 - **Silence tab:** "✦ Open AI Silence Studio" button (`openSilenceModal()`) added at top — real modal, backed by `analyzeAudio()`/`runAIAnalysis()`/`applySilenceRemoval()`
 - **Captions tab:** unchanged content. Do NOT add a modal-launcher button here — `openCaptionAI()` was removed because it was dead (just toasted "use the Transcribe button"); `generateAICaptions()` is a legacy stub kept only because the (unreachable) `#captionModal`'s Generate button still calls it
 - **Right panel (inspector):** flat stacked sections replaced by tabs — `.insp-tabs`/`.insp-tab`/`.insp-panel`, switched via `switchInspTab(name)` (namespaced separately from `switchTab()` on purpose — they used to share `.panel-tab` and each call was wiping the other's active state)
-  - **Video** tab: Clip Info (now wrapped in `.info-card`) + Flip
+  - **Video** tab: Clip Info (now wrapped in `.info-card`) + Flip + Snapshot Frame
   - **Speed** tab: Rate select
   - **Captions** tab: full caption style block (font/weight/layout/size/color/stroke/position)
-  - **Export** section stays outside the tabs (persistent footer) — cross-cutting, not clip-specific
+  - **Export**: the persistent footer block was removed (2026-07-26) — it duplicated the topbar Export button (Export Video) and the left-panel Captions tab's SRT/VTT buttons, and appeared under every insp-tab regardless of which was active, reading as if export lived in every tab. Export is now reached only via the topbar `⬆ Export` button → `#exportModal` (format/preset/burn-captions/aspect options). SRT/VTT export stays in the left-panel Captions tab only. Snapshot Frame moved into the Video insp-tab (still calls `exportFrame()`).
 - **Timeline toolbar:** flat row of individual pills (Select/Trim/Split/Trim Before/Merge Cuts/Trim After/Silence, then Snap/Snap Gaps) — no longer grouped in a boxed tray
 - **Playback bar:** wrapped in a floating `.pb-pill` capsule instead of a flat full-width strip
 - **Export modal:** Save folder row removed (native Save dialog handles folder+filename)

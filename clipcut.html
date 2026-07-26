@@ -302,6 +302,11 @@
         <div class="flip-btn" id="flipV" onclick="toggleFlip('v')"><span class="icon">↕</span><span>Vertical</span></div>
       </div>
     </div>
+
+    <div class="prop-group">
+      <div class="prop-title">Frame</div>
+      <button class="act-btn" onclick="exportFrame()">📸 Snapshot Frame</button>
+    </div>
     </div>
 
     <div class="insp-panel" data-insp="speed">
@@ -408,14 +413,6 @@
         <span style="font-size:9px;color:var(--text2)">×</span>
       </div>
     </div>
-    </div>
-
-    <div class="prop-group">
-      <div class="prop-title">Export</div>
-      <button class="act-btn primary" onclick="openExportModal()">⬇ Export Video</button>
-      <button class="act-btn" onclick="exportFrame()">📸 Snapshot Frame</button>
-      <button class="act-btn" onclick="exportCaptions('srt')">⬇ Export SRT</button>
-      <button class="act-btn" onclick="exportCaptions('vtt')">⬇ Export VTT</button>
     </div>
   </div>
 
