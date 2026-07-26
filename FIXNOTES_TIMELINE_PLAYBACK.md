@@ -391,12 +391,29 @@ Ordered by severity. ☠ = destroys work / corrupts data · ● = broken feature
 **Phase 1 — stop the bleeding (½ day)** ✅ DONE — #1, #2, #3, #7, #9, #14, #16, #18, #20 all fixed and pushed (commits 098dbdb..48bd3e9).
 Bugs #1, #3, #18 (one-liners) · #2 (delete one line) · #9 (delete a factor) · #7 (wire menu).
 
-**Phase 2 — timeline correctness + visuals (1–2 days)**
+**Phase 2 — timeline correctness + visuals (1–2 days)** ✅ DONE (mostly) — commits b19907c..65f567c.
 #4, #5, #13 (mapping) → then the Part C redesign: lane stack, solid color tokens,
 1-element cuts, suggestion strip, gap hatching, caption-track clamping (C4).
 Do the redesign *after* the mapping fixes so blocks land where they should.
 Then §C6 on-timeline cut dragging (edges + move + snapping) — it depends on the
 mapping fixes and the 1-element cut blocks, and includes bug #20.
+
+*Landed:* mapping fixes (#4/#5/#13), solid color tokens, suggestion strip lane,
+1-element cut blocks, thin highlight bar, waveform-row mirror divs deleted,
+`.cut-selected`/CSS-class selection styling, sentence-level caption track with
+teal colors, and §C6 on-timeline drag (edges + move + snap-to-word/cut/segment/
+playhead/whole-second, Alt=no-snap, Shift=fine-drag).
+*Deferred (flagged, not silently dropped):*
+- **Gap hatching** — needs a real gap in segment `timelineStart` layout pre-snap;
+  `applyCuts()`/`snapGaps()` currently always lay segments out contiguously, so
+  there's nothing to hatch today. Would require changing segment/timeline
+  semantics (touches `applyCuts`, `snapGaps`, `sourceTimeToTimeline`,
+  `buildPlaySegments`) — bigger than a rendering change, do as its own task.
+- **§C6 full clamping** — drag currently only enforces the 0.05s min-gap between
+  a cut's own start/end; clamping to the containing segment's bounds and to
+  neighbouring same-lane cuts isn't implemented (snapping covers the common
+  case, but a fast drag can still push a cut out of its segment or across a
+  neighbour).
 
 **Phase 3 — timeline performance (1 day)**
 F-B1 virtualization → F-B2 layer split → F-B3/B4 batching + delegation → F-B5/B6 CSS/waveform.
