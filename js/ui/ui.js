@@ -87,10 +87,28 @@ function syncTopbarClipName(){
   el.textContent = S.current ? S.current.name : 'No clip loaded';
 }
 
+let _lastPanelTab = 'media'; // last non-settings left-panel tab, restored by toggleSettingsTab()
+
 function switchTab(name){
   document.querySelectorAll('.panel-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id===`tab-${name}`));
+  if(name!=='settings') _lastPanelTab = name;
+  document.getElementById('settingsToggleBtn')?.classList.toggle('act', name==='settings');
   if(name==='settings'){ _loadWhisperConfigFromServer(); refreshTemplateList(); }
+}
+
+// Gear icon: opens Settings; pressing it again closes Settings back to
+// whichever left-panel tab was active before. Also closes the AI chat panel
+// on open so the two don't sit open together.
+function toggleSettingsTab(){
+  const isSettingsOpen = document.getElementById('tab-settings')?.classList.contains('active');
+  if(isSettingsOpen){
+    switchTab(_lastPanelTab);
+  } else {
+    const chatPanel = document.getElementById('chatPanel');
+    if(chatPanel && chatPanel.style.display==='flex') toggleChatPanel();
+    switchTab('settings');
+  }
 }
 
 function switchInspTab(name){

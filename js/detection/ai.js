@@ -7,6 +7,8 @@ function toggleChatPanel(){
   panel.style.display=isOpen?'none':'flex';
   document.getElementById('chatToggleBtn').classList.toggle('act',!isOpen);
   if(!isOpen){
+    // opening chat — close Settings first so the two don't sit open together
+    if(document.getElementById('tab-settings')?.classList.contains('active')) switchTab(_lastPanelTab);
     if(S.selectedModel) document.getElementById('chatModelBadge').textContent=S.selectedModel.name;
     if(!S.chatHistory.length) renderChatSuggestions();
   }
