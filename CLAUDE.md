@@ -130,26 +130,25 @@ js/main.js              ← must be last (calls renderTimeline etc.)
 - **Frontend:** Vanilla HTML/CSS/JS — no React, no build system
 - **Fonts:** Outfit (UI) + JetBrains Mono (timecodes/mono) via Google Fonts
 - **Desktop wrapper:** pywebview — exposes Python API to JS via `window.pywebview.api.*`
-- **Transcription:** Two backends, switchable via config.json `whisper_backend`:
-  - `faster-whisper` (default) — fast, word timestamps via beam search, may drift in long silences
-  - `whisperx` (opt-in) — faster-whisper transcription + Wav2Vec2 forced alignment → ms-accurate word boundaries + retake detection
+- **Transcription:** Three backends, switchable live from Settings (no restart) via config.json `whisper_backend` (default `whisperx`):
+  - `parakeet` — NVIDIA NeMo Parakeet-TDT (`PARAKEET_MODEL_ID`, default `nvidia/parakeet-tdt-0.6b-v3`) — fastest (~50× real-time), English-primary, word timestamps built into the model output, no separate alignment pass. Lazy-loaded singleton (`_get_parakeet_model()`), falls back to WhisperX if the NeMo import/load fails
+  - `whisperx` — faster-whisper transcription + Wav2Vec2 forced alignment → ms-accurate word boundaries + retake detection
+  - `faster-whisper` — fast, word timestamps via beam search, may drift in long silences (no forced alignment)
 - **AI Analysis:** OpenRouter API (free models) + Ollama local fallback
 - **Video Export:** Native ffmpeg (h264_nvenc GPU encoding) — two-pass for multi-segment
 - **Audio Analysis:** Web Audio API (RMS waveform)
 - **Waveform rendering:** OffscreenCanvas + Web Worker (`waveform.worker.js`) — main thread fallback if unsupported
 - **Playback loop:** `requestVideoFrameCallback` (rVFC) — fires per rendered frame via `metadata.mediaTime`; falls back to `timeupdate` if unsupported
-- **Silence Detection:** ffmpeg `silencedetect` filter — runs in serve.py API class
-- **VAD Detection:** Silero VAD (`silero-vad`) — lazy singleton, used by `detectDeadSpaces()`
-- **Visual Detection:** MediaPipe FaceMesh (`mediapipe` + `opencv-contrib-python`) — lip aperture landmarks 13/14 normalised by face height, used by `mediapipe_detect()`
+- **Silence Detection:** ffmpeg `silencedetect` filter (`detect_silence()`) — primary path for `analyzeAudio()`'s dead-air pass; falls back to client-side Web Audio RMS (`detectSilences()`) if ffmpeg/pywebview is unavailable
+- **Dead-space Detection:** Silero VAD (`silero-vad`) — lazy singleton (`_get_vad_model()`), used by `detectDeadSpaces()` when `S.settings.useVAD` is on; falls back to the same RMS silence detector otherwise. **MediaPipe-based visual (lip-movement) detection was removed** — if you see references to it in older docs/backups, that feature no longer exists in the current codebase
 - **Flask:** REMOVED — all backend logic is in serve.py API class
 
 ## Python Dependencies
 ```
-faster-whisper       # transcription (always loaded)
-whisperx             # forced alignment backend (opt-in)
+faster-whisper       # transcription (always loaded as a fallback path)
+whisperx             # forced alignment backend
+nemo_toolkit[asr]    # Parakeet-TDT backend (NVIDIA NeMo) — heaviest install, opt-in
 silero-vad           # VAD dead-air detection
-mediapipe            # visual lip detection
-opencv-contrib-python # video frame reading for mediapipe (pulled by mediapipe)
 torch 2.11+cu128     # GPU — CUDA 12.8, RTX 4070
 torchaudio 2.11+cu128
 torchvision          # matched to torch version
@@ -158,6 +157,7 @@ ffmpeg               # system install (export, silence detect, audio extract)
 ```
 Install CUDA torch: `pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu128`
 Install WhisperX: `pip install whisperx --no-deps && pip install transformers ctranslate2`
+Install Parakeet: `pip install nemo_toolkit['asr']` (large install — CUDA-only, only needed if you actually select the `parakeet` backend)
 
 ## How to Run
 ```bash
@@ -184,18 +184,20 @@ python serve.py
   "ollama_url": "http://localhost:11434",
   "ollama_model": "llama3",
   "whisper_model": "base",
-  "whisper_backend": "faster-whisper",
+  "whisper_backend": "whisperx",
   "whisperx_model": "distil-large-v3",
   "whisperx_batch_size": 16,
+  "parakeet_model": "nvidia/parakeet-tdt-0.6b-v3",
   "silence_threshold": -35,
   "silence_min_duration": 0.5
 }
 ```
-- `whisper_backend`: `"faster-whisper"` (default) | `"whisperx"` — switchable live from Settings tab, no restart needed
+- `whisper_backend`: `"parakeet"` | `"whisperx"` (default) | `"faster-whisper"` — switchable live from Settings tab, no restart needed
 - `whisperx_model`: model for `whisperx.load_model()` — `"distil-large-v3"` (fast+accurate), `"large-v3"` (max accuracy), `"medium"`, `"small"`
 - `whisperx_batch_size`: GPU parallel chunks — `16` for 4070 12GB; drop to `8` on OOM
+- `parakeet_model`: HuggingFace/NeMo model id passed to `nemo_asr.models.ASRModel.from_pretrained()` — only read when `whisper_backend` is `"parakeet"`
 - `whisper_port` and `whisper_mode` are no longer used (Flask removed)
-- distil-large-v3 + Wav2Vec2 alignment model auto-download from HuggingFace on first use (~1.5GB + ~100MB, cached)
+- distil-large-v3 + Wav2Vec2 alignment model auto-download from HuggingFace on first use (~1.5GB + ~100MB, cached); Parakeet-TDT auto-downloads similarly on first use of that backend
 
 ## serve.py — pywebview API class
 All Python functionality exposed to JS via `window.pywebview.api.*`:
@@ -205,13 +207,12 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `ensure_assets_folder(source_path)` / `list_assets(source_path)` / `import_asset(source_path, asset_file_path)` → per-video Asset Library ("working folder") — `<video>_assets/`, a sibling folder next to the source file. `list_assets` returns that folder's image files; `import_asset` copies a picked file into it (de-dupes name collisions with a numeric suffix, never overwrites). Backs the Overlay inspector tab's Asset Library grid (`js/ui/imagelayers.js`)
 - `pick_image()` → native image file picker (mirrors `open_file()`), backs the "+ Image" sticker/overlay button (`js/ui/imagelayers.js`)
 - `probe_duration(source_path)` → ffprobe duration in seconds (for unplayable containers)
-- `ping()` → loads transcription model (backend-dependent) + Silero VAD (lazy singletons), returns `{online, model, device, backend}`
-- `transcribe(source_path)` → ffmpeg audio extract + transcription. Returns `{words, language, duration, backend}` + optional `retake_cuts` when backend=whisperx
-- `detect_silence(source_path, threshold, min_duration, pad_before, pad_after)` → `{cuts, count, duration}`
-- `vad_detect(source_path, threshold, min_speech_ms, min_silence_ms)` → `{speech_segments, cuts, count, duration}` — Silero VAD; inverts speech to produce dead_air cuts; same response shape as `detect_silence()`
-- `mediapipe_detect(source_path, lip_threshold, min_speaking_ms, frame_skip)` → `{speaking_segments, cuts, count, duration}` — MediaPipe FaceMesh lip aperture; inverts speaking → dead_air cuts
-- `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size}` for Settings UI
-- `save_whisper_config(backend, model, batch_size)` → writes to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`
+- `ping()` → loads the active transcription backend's model (`parakeet`→`_get_parakeet_model()`, `whisperx`→`_get_whisperx_model()`, else `_get_whisper_model()` for faster-whisper) + Silero VAD (lazy singletons), returns `{online, model, device, backend}`
+- `transcribe(source_path)` → ffmpeg audio extract + transcription, backend-dispatched (Parakeet path / WhisperX path / faster-whisper path — see "WhisperX models" and "Parakeet TDT model" sections below). Returns `{words, language, duration, backend}` + optional `retake_cuts` when backend=whisperx (`_detect_retakes()` — WhisperX-only, needs the forced-alignment word boundaries)
+- `detect_silence(source_path, threshold, min_duration, pad_before, pad_after)` → `{cuts, count, duration}` — ffmpeg `silencedetect`; primary engine behind `analyzeAudio()`'s dead-air pass, JS falls back to client-side Web Audio RMS if this errors or pywebview/sourcePath is unavailable
+- `vad_detect(source_path, threshold, min_speech_ms, min_silence_ms)` → `{speech_segments, cuts, count, duration}` — Silero VAD; inverts speech to produce dead_air cuts; same response shape as `detect_silence()`. Used by `detectDeadSpaces()` when `S.settings.useVAD` is on (default); falls back to the same RMS silence detector when off or on failure. **There is no visual/MediaPipe detection engine** — a lip-movement-based dead-air detector existed in an earlier session but was fully removed (Python method, JS settings flags, and the Auto Mode steps that called it are all gone); don't reintroduce `useMediapipe`/`combineMode`/dual-engine AND-OR combining without the user asking for it back
+- `get_whisper_config()` → returns `{whisper_backend, whisperx_model, whisperx_batch_size, parakeet_model}` for Settings UI
+- `save_whisper_config(backend, model, batch_size)` → writes `whisper_backend`/`whisperx_model`/`whisperx_batch_size` to config.json + applies globals live (no restart needed), returns `{ok, backend, model, batch_size}`. Note: doesn't currently take/write `parakeet_model` — that field is config.json-only (edit the file directly to change which Parakeet model loads)
 - `export_video(..., text_style_json='{}', preview_height_px=0, caption_mode='static', text_layers_json='[]', image_layers_json='[]', transition_type='none', transition_duration=0.5, color_filter='none')` → opens `FileDialog.SAVE`, two-pass GPU encode, returns `{success, path}`. `text_style_json`/`preview_height_px`/`caption_mode`/`text_layers_json`/`image_layers_json` only matter when `burn_captions=True` — see `_generate_ass()` below and `js/ui/imagelayers.js`'s CLAUDE.md entry for `image_layers_json`. Thin wrapper: resolves the Save dialog then delegates to `_export_video_core(..., save_path, ...)`, the actual encode logic. **`_export_video_core()` checks `transition_type` first, before `burn_captions`** — if set (and not `'none'`) it routes to `_export_with_transitions()` instead, skipping ASS/text/image burn-in entirely for that export even if `burn_captions` was also true (logged as a warning) — see `_make_xfade_filter_complex()`'s docstring for why the two don't combine yet. `color_filter` (a preset name, resolved via `_color_filter_ffmpeg()`) applies regardless of which of the three export paths (fast/burn-in/transitions) is used — it's threaded into all of them the same way `aspect_filter`/`flip_filter` are
 - `_export_with_transitions(...)` / `_make_xfade_filter_complex(segments, transition_type, transition_dur)` — chains kept segments with ffmpeg's `xfade`/`acrossfade` instead of a hard-cut concat. `XFADE_TYPES` maps UI-friendly names (`crossfade`,`wipeleft`,`wiperight`,`zoom`,`glitch`,`dissolve`) to ffmpeg's actual transition names (`glitch`→`pixelize` — xfade has no literal glitch effect). Each junction's duration is clamped to the shorter of its two adjacent segments' own durations (not compounded across a long chain — an edge case for pathologically short segments, not handled). Total output duration shrinks by `transition_duration` per junction, since adjacent clips overlap during the crossfade instead of playing back to back — `_export_with_transitions()` computes this before starting `_run_ffmpeg()`'s progress tracking. **Scope cut, not an oversight:** no ASS/text-layer/image-overlay support in this path — those assume a plain gapless concat via `seg_meta`, which doesn't account for xfade shrinkage, so mixing both would desync caption/text/sticker timing from the real output
 - `export_video_batch_one(source_path, segments_json, save_path, ...)` → same params/encode core as `export_video()` (calls the same `_export_video_core()`) but takes `save_path` directly instead of opening a native Save dialog — backs batch export (`js/media/batch.js`), where N clips need one destination folder, not N dialogs
@@ -238,6 +239,12 @@ All Python functionality exposed to JS via `window.pywebview.api.*`:
 - `_detect_retakes(segments)` — module-level helper: Jaccard word overlap (≥70%, 10-seg window) marks earlier occurrence of repeated sentence as retake
 - WhisperX path in `transcribe()`: load_audio → model.transcribe → align → extract words → `_detect_retakes` → return `{..., retake_cuts, backend:'whisperx'}`
 - Falls back to faster-whisper if whisperx import fails
+
+### Parakeet TDT model (serve.py)
+- `_get_parakeet_model()` — lazy singleton; `import nemo.collections.asr as nemo_asr` then `ASRModel.from_pretrained(PARAKEET_MODEL_ID)`, moved to `.cuda()` + `.eval()`. GPU-only — no CPU fallback path for this backend specifically (the whole app targets the 4070 anyway)
+- Parakeet path in `transcribe()`: `model.transcribe([audio_path], timestamps=True, return_hypotheses=True)` — word timestamps come straight from the model's own output (`hyp.timestamp['word']`), no separate alignment step needed unlike WhisperX. Handles both the TDT decoder's direct `start`/`end` seconds and the CTC fallback's frame-offset format (`start_offset`/`end_offset` × 10ms hop)
+- No retake detection on this backend (`_detect_retakes` is WhisperX-only — needs the forced-alignment segment boundaries it produces)
+- On any exception (model load or transcribe failure), logs and falls through to the WhisperX code path in the same `transcribe()` call rather than returning an error to JS
 
 ### Daemon threads (serve.py)
 - **Whisper auto-ping:** starts 2s after window open; warms correct model based on `WHISPER_BACKEND`; updates `#whisperStatus` and `#settingsBackendBadge` via `evaluate_js`
@@ -306,12 +313,14 @@ S.ollamaModel      // selected ollama model id
 S.chatHistory      // AI chat message history
 S.whisperMode      // words | captions | segments
 S.wordsPerCap      // words per caption chunk (default 2)
-S.settings         // pipeline + auto mode config (persisted to localStorage via settings.js)
-  // Detection: useVAD, useMediapipe, combineMode ('and'|'or'), vadThreshold, vadMinSpeechMs, vadMinSilenceMs
-  // MediaPipe: mpLipThreshold, mpMinSpeakingMs, mpFrameSkip
-  // Auto Mode: autoTranscribe, autoWaveform, autoSilence, autoDeadSpaces, autoMediapipe, autoFillers
-  // Deep AI:   deepAI, deepMediapipe
+S.settings         // pipeline + auto mode config (persisted to localStorage via settings.js — see SETTINGS_DEFAULTS)
+  // Detection: useVAD, vadThreshold, vadMinSpeechMs, vadMinSilenceMs
+  // Auto Mode: autoTranscribe, autoWaveform, autoSilence, autoDeadSpaces, autoFillers
+  // Deep AI:   deepAI, deepEditReview
   // Transcription: detectRetakes
+  // (MediaPipe visual detection — useMediapipe/combineMode/mpLipThreshold/mpMinSpeakingMs/
+  //  mpFrameSkip/autoMediapipe/deepMediapipe — was fully removed; don't reintroduce
+  //  without the user asking for it back)
 S.stripPunct       // strip punctuation from captions (default true)
 S.captionLayout    // single | stack | grid
 S.captionMode      // 'static' | 'word-highlight' (karaoke ASS export only) — see setCaptionMode()
@@ -459,8 +468,8 @@ is currently showing gap-hatched cuts pre-snap.
 - `_initWaveWorker()` IIFE — transfers both waveform canvas controls via `transferControlToOffscreen()` to waveform.worker.js
 
 **js/detection/silence.js**
-- `detectDeadSpaces()` — reads `S.settings.useVAD` + `S.settings.useMediapipe`; runs enabled engines, combines with `_combineCuts(mode)`, falls back to RMS if all fail
-- `_combineCuts(cutsA, cutsB, mode)` — 'and': intersection ≥0.1s overlap; 'or': union/merge with 0.05s gap tolerance
+- `analyzeAudio()` — dead-air pass used by Auto Mode's "Silence" step: `pywebview.api.detect_silence()` (ffmpeg `silencedetect`) as primary, falls back to client-side `detectSilences()` (Web Audio RMS, via `extractAudioData()`) if pywebview/sourcePath is unavailable or the call throws. Writes cuts tagged `_src:'audio'`
+- `detectDeadSpaces()` — separate pass, used by Auto Mode's "Dead spaces" step and the standalone "⊘ Detect Dead Spaces" button: if `S.settings.useVAD` is on, tries `pywebview.api.vad_detect()` (Silero VAD); on failure or when VAD is off, falls back to the same `detectSilences()` RMS detector (requires `S.waveformData` already populated). Writes cuts tagged `_src:'dead'`. **Single-engine only** — there is no second engine to combine against (a MediaPipe visual detector + AND/OR combine mode existed in an earlier session and was fully removed; `_combineCuts()` no longer exists)
 - `detectFillers()` — local filler word detection from S.captions
 - `applyCuts()` — splits S.segments at selected cut points, calls `buildPlaySegments()`, `sliceWaveforms()`, then `renderTimeline()`
 - `renderAllFindings()` — renders all cuts/findings across AI and Silence tabs
@@ -684,25 +693,23 @@ Reskinned to an Apple-style dark shell (2026-07-26 session), then restructured t
 **Captions tab:** Load Whisper Model button, words-per-cap stepper, strip punctuation toggle, transcribe button, caption list
 **Silence tab:** AI Silence Studio modal launcher, threshold/duration/padding sliders (cached to localStorage), Run AI Silence Removal, Detect Dead Spaces, silence findings list (dead_air + silence types only), Edit Check (🔍 Check Edit → `runEditLint()`, see `js/detection/linter.js`) directly above Apply Selected Cuts
 **AI Tools tab:** provider pills (OpenRouter / Ollama), model selector, ping status, script textarea, Analyse Script, Detect Fillers, Tier-2 Edit Review (`runTier2EditReview()`), findings list (filler + retake + weak + highlight types), Apply Selected Cuts, AI Chat panel
-**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (faster-whisper/WhisperX pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, MediaPipe toggle, combine mode AND/OR, VAD tuning sliders, MediaPipe tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, Tier-2 edit review, MediaPipe pass) · UGC Templates (`js/ui/templates.js` — save/apply/delete named presets) · Reset to Defaults
+**Settings tab (⚙, gear icon in topbar, not in the rail):** Transcription backend (Parakeet/WhisperX/faster-whisper pills, model select, batch size slider, retake detection toggle) · Detection Pipeline (VAD toggle, VAD tuning sliders) · Auto Mode Steps (checkboxes per step) · Deep AI Mode Extras (AI analysis, Tier-2 edit review) · UGC Templates (`js/ui/templates.js` — save/apply/delete named presets) · Reset to Defaults
 
 ## Auto Mode & Deep AI Mode
 `runAutoMode(deep)` in `js/detection/silence.js` — all steps gated by `S.settings` flags:
 
 | Step | Setting flag | Auto | Deep |
 |------|-------------|------|------|
-| Transcribe (Whisper/WhisperX) | `autoTranscribe` | ✓ | ✓ |
+| Transcribe (active backend) | `autoTranscribe` | ✓ | ✓ |
 | Waveform analysis | `autoWaveform` | ✓ | ✓ |
-| Silence detection (ffmpeg) | `autoSilence` | ✓ | ✓ |
-| Dead spaces (VAD/MediaPipe) | `autoDeadSpaces` | ✓ | ✓ |
-| MediaPipe visual check | `autoMediapipe` | ✓ (only if `useMediapipe` on) | ✓ |
+| Silence detection (ffmpeg/RMS) | `autoSilence` | ✓ | ✓ |
+| Dead spaces (VAD/RMS) | `autoDeadSpaces` | ✓ | ✓ |
 | Filler words | `autoFillers` | ✓ | ✓ |
 | AI script analysis | `deepAI` | ✗ | ✓ |
-| MediaPipe visual pass (Deep) | `deepMediapipe` | ✗ | ✓ (only if `useMediapipe` also on) |
 | Tier-2 AI edit review | `deepEditReview` | ✗ | ✓ (opt-in, default off — runs after `deepAI` so it reviews AI-suggested cuts too) |
 
-- `detectDeadSpaces()` inside Auto/Deep respects `S.settings.useVAD`, `S.settings.useMediapipe`, and `S.settings.combineMode`
-- WhisperX retake cuts absorbed during transcription step only if `S.settings.detectRetakes` is on
+- `detectDeadSpaces()` inside Auto/Deep respects `S.settings.useVAD` only — VAD on tries Silero, falls back to RMS on failure or when off; there is no second engine to combine against
+- WhisperX retake cuts absorbed during transcription step only if `S.settings.detectRetakes` is on (Parakeet/faster-whisper backends don't produce retake data — no forced-alignment pass to base it on)
 - All settings persist to localStorage via `saveSettings()`
 
 ## AI Chat
