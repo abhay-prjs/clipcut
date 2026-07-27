@@ -814,6 +814,8 @@
   <button class="tool-btn" style="height:22px;font-size:8.5px;flex-shrink:0" onclick="resetTrim()">↺ Reset</button>
 </div>
 
+<div class="tl-resizer" id="tlResizer" title="Drag to resize the timeline"></div>
+
 <!-- TIMELINE -->
 <div class="timeline-section">
   <div class="timeline-header">
@@ -843,21 +845,21 @@
     <div class="track-labels">
       <div style="height:20px;border-bottom:1px solid var(--b1)"></div>
       <div style="height:8px;border-bottom:1px solid var(--b1)"></div>
+      <div class="track-label"><span class="dot" style="background:var(--tl-text-fill)"></span>Text</div>
+      <div class="track-label"><span class="dot" style="background:var(--tl-img-fill)"></span>Image</div>
       <div class="track-label"><span class="dot" style="background:var(--blue)"></span>Video</div>
       <div class="waveform-label"><span class="dot" style="background:var(--teal)"></span>Wave</div>
       <div class="track-label"><span class="dot" style="background:var(--tl-cap-border)"></span>Captions</div>
-      <div class="track-label"><span class="dot" style="background:var(--accent)"></span>Text</div>
-      <div class="track-label"><span class="dot" style="background:#8E6FF7"></span>Image</div>
     </div>
     <div class="tracks-area" id="tracksArea">
       <div class="tracks-inner" id="tracksInner">
         <div class="ruler" id="ruler"></div>
         <div class="suggestion-strip" id="suggestionStrip"></div>
+        <div class="track-row tl-row-text" id="textLayerTrack"></div>
+        <div class="track-row tl-row-image" id="imageLayerTrack"></div>
         <div class="track-row" id="videoTrack"></div>
         <div class="waveform-row" id="waveformRow"><canvas id="tlWaveCanvas"></canvas></div>
         <div class="track-row" id="captionTrack"></div>
-        <div class="track-row" id="textLayerTrack"></div>
-        <div class="track-row" id="imageLayerTrack"></div>
         <div class="playhead" id="playhead"></div>
       </div>
     </div>

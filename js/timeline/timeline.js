@@ -278,16 +278,19 @@ function renderTimeline(){
     }
   }
 
-  // Enforce strict DOM order: ruler → suggestionStrip → videoTrack → waveformRow → captionTrack → textLayerTrack → imageLayerTrack → playhead
+  // Enforce strict DOM order: ruler → suggestionStrip → textLayerTrack → imageLayerTrack → videoTrack → waveformRow → captionTrack → playhead
+  // Text/Image sit above Video because that's their real z-order — they
+  // composite ON TOP of the video frame, so their timeline lane reads as
+  // "above" the thing they're drawn over, matching every other NLE's convention.
   const ti=document.getElementById('tracksInner');
   [
     document.getElementById('ruler'),
     document.getElementById('suggestionStrip'),
+    document.getElementById('textLayerTrack'),
+    document.getElementById('imageLayerTrack'),
     document.getElementById('videoTrack'),
     document.getElementById('waveformRow'),
     document.getElementById('captionTrack'),
-    document.getElementById('textLayerTrack'),
-    document.getElementById('imageLayerTrack'),
     ph,
   ].forEach(el=>ti.appendChild(el));
   updatePlayhead();

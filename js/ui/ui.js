@@ -99,6 +99,41 @@ function switchInspTab(name){
 }
 
 // ═══════════════════════════════════════
+// TIMELINE RESIZER — drag the handle between the preview and the timeline
+// to trade height between them (both live inside the same flex column, so
+// growing one shrinks the other automatically). Height persists across
+// reloads via localStorage since it's a layout preference, not edit state.
+// ═══════════════════════════════════════
+(function _initTimelineResizer(){
+  const handle = document.getElementById('tlResizer');
+  if(!handle) return;
+  const MIN_H = 160, MAX_H = Math.round(window.innerHeight*0.75);
+
+  const saved = parseInt(localStorage.getItem('clipcut_timeline_h'));
+  if(saved) document.documentElement.style.setProperty('--timeline-h', Math.min(Math.max(saved,MIN_H),MAX_H)+'px');
+
+  let dragging=false, startY=0, startH=0;
+  handle.addEventListener('pointerdown', e=>{
+    dragging=true; startY=e.clientY;
+    startH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--timeline-h'))||320;
+    handle.classList.add('dragging');
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const newH = Math.min(Math.max(startH-(e.clientY-startY), MIN_H), MAX_H);
+    document.documentElement.style.setProperty('--timeline-h', newH+'px');
+  });
+  handle.addEventListener('pointerup', e=>{
+    if(!dragging) return;
+    dragging=false;
+    handle.classList.remove('dragging');
+    const h=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--timeline-h'))||320;
+    localStorage.setItem('clipcut_timeline_h', h);
+  });
+})();
+
+// ═══════════════════════════════════════
 // TOAST / KEYBOARD
 // ═══════════════════════════════════════
 function toast(msg){

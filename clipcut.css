@@ -23,7 +23,7 @@
   --text: #f5f5f7;
   --text2: rgba(255,255,255,.55);
   --text3: rgba(255,255,255,.32);
-  --timeline-h: 220px;
+  --timeline-h: 320px;
   --panel-w: 260px;
   --right-w: 280px;
 
@@ -130,7 +130,7 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',-apple-system,B
 .center{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .preview-area{flex:1;display:flex;align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
 
-.video-container{position:relative;background:#000;border-radius:14px;overflow:hidden;max-height:55vh;max-width:calc(100% - 28px);aspect-ratio:9/16;height:calc(100% - 28px);box-shadow:0 0 0 1px var(--b1),0 20px 60px rgba(0,0,0,.6);}
+.video-container{position:relative;background:#000;border-radius:14px;overflow:hidden;max-height:44vh;max-width:calc(100% - 28px);aspect-ratio:9/16;height:calc(100% - 28px);box-shadow:0 0 0 1px var(--b1),0 20px 60px rgba(0,0,0,.6);}
 #previewVideo{width:100%;height:100%;object-fit:contain;display:block;}
 
 .caption-overlay{position:absolute;bottom:14%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:7px 14px;border-radius:8px;font-size:15px;font-weight:700;text-align:center;max-width:88%;line-height:1.4;display:none;pointer-events:none;}
@@ -274,6 +274,11 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .api-key-save{padding:7px 13px;background:var(--blue-dim);border:1px solid rgba(10,132,255,.3);border-radius:8px;color:var(--blue-soft);font-size:10.5px;font-weight:600;cursor:pointer;}
 
 /* ── TIMELINE ── */
+/* Drag handle between the preview and the timeline — lets the timeline grow
+   at the preview's expense (or vice versa) instead of a fixed split neither
+   side can escape. */
+.tl-resizer{height:6px;flex-shrink:0;background:var(--b1);cursor:row-resize;position:relative;z-index:50;}
+.tl-resizer:hover,.tl-resizer.dragging{background:var(--blue);}
 .timeline-section{height:var(--timeline-h);background:#18181A;border-top:1px solid var(--b1);display:flex;flex-direction:column;flex-shrink:0;}
 .timeline-header{height:32px;display:flex;align-items:center;padding:0 12px;gap:6px;border-bottom:1px solid var(--b1);flex-shrink:0;}
 .tl-title{font-size:10.5px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);}
@@ -309,6 +314,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 .suggestion-strip{height:8px;position:relative;border-bottom:1px solid var(--b1);background:rgba(255,255,255,.02);contain:layout paint;}
 .track-row{height:36px;position:relative;border-bottom:1px solid var(--b1);background:rgba(255,255,255,.02);contain:layout paint;}
+/* Faint per-track tint so an empty band still reads as "the Text/Image
+   lane" at a glance — no more guessing which row a block landed in. */
+.tl-row-text{background:rgba(217,130,43,.05);}
+.tl-row-image{background:rgba(124,92,217,.05);}
 .waveform-row{height:50px;position:relative;border-bottom:1px solid var(--b1);background:rgba(10,132,255,.03);contain:layout paint;}
 
 /* Removed-cut gap, pre-snap only (S.snapped===false) — reads as "cut" at a
