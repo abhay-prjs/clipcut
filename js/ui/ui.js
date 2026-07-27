@@ -94,10 +94,34 @@ function switchTab(name){
 }
 
 function switchInspTab(name){
-  document.querySelectorAll('.insp-tab').forEach(t=>t.classList.toggle('active',t.dataset.insp===name));
-  document.querySelectorAll('.insp-panel').forEach(p=>p.classList.toggle('active',p.dataset.insp===name));
+  // 'text'/'overlay' are Layers sub-tabs, kept as valid names here so existing
+  // call sites (addTextLayer, selectImageLayer, etc.) don't need to know about
+  // the Layers/sub-tab split.
+  const layerSub = (name==='text'||name==='overlay') ? name : null;
+  const topName = layerSub ? 'layers' : name;
+  document.querySelectorAll('.insp-tab').forEach(t=>t.classList.toggle('active',t.dataset.insp===topName));
+  document.querySelectorAll('.insp-panel').forEach(p=>p.classList.toggle('active',p.dataset.insp===topName));
+  if(layerSub) switchLayerSubTab(layerSub);
+}
+
+function switchLayerSubTab(name){
+  document.querySelectorAll('.layer-subtab').forEach(t=>t.classList.toggle('active',t.dataset.layersub===name));
+  document.querySelectorAll('.layer-subpanel').forEach(p=>p.classList.toggle('active',p.dataset.layersub===name));
   if(name==='overlay') refreshAssetLibrary();
 }
+
+// Mouse-wheel horizontal scroll for the inspector tab bar — lets vertical
+// wheel motion scroll the bar sideways when it overflows, instead of tabs
+// being clipped with no way to reach them.
+(function _initInspTabsWheelScroll(){
+  const bar = document.querySelector('.insp-tabs');
+  if(!bar) return;
+  bar.addEventListener('wheel', e=>{
+    if(bar.scrollWidth <= bar.clientWidth) return;
+    e.preventDefault();
+    bar.scrollLeft += (e.deltaY || e.deltaX);
+  }, {passive:false});
+})();
 
 // ═══════════════════════════════════════
 // TIMELINE RESIZER — drag the handle between the preview and the timeline

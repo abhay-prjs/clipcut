@@ -306,10 +306,8 @@
   <div class="right-panel">
     <div class="insp-tabs">
       <div class="insp-tab active" data-insp="video" onclick="switchInspTab('video')">Video</div>
-      <div class="insp-tab" data-insp="speed" onclick="switchInspTab('speed')">Speed</div>
       <div class="insp-tab" data-insp="captions" onclick="switchInspTab('captions')">Captions</div>
-      <div class="insp-tab" data-insp="text" onclick="switchInspTab('text')">Text</div>
-      <div class="insp-tab" data-insp="overlay" onclick="switchInspTab('overlay')">Overlay</div>
+      <div class="insp-tab" data-insp="layers" onclick="switchInspTab('layers')">Layers</div>
     </div>
 
     <div class="insp-panel active" data-insp="video">
@@ -348,9 +346,7 @@
       <div class="prop-title">Frame</div>
       <button class="act-btn" onclick="exportFrame()">📸 Snapshot Frame</button>
     </div>
-    </div>
 
-    <div class="insp-panel" data-insp="speed">
     <div class="prop-group">
       <div class="prop-title">Speed</div>
       <div class="prop-row">
@@ -462,7 +458,13 @@
     </div>
     </div>
 
-    <div class="insp-panel" data-insp="text">
+    <div class="insp-panel" data-insp="layers">
+    <div class="layer-subtabs">
+      <button class="layer-subtab active" data-layersub="text" onclick="switchLayerSubTab('text')">Text</button>
+      <button class="layer-subtab" data-layersub="overlay" onclick="switchLayerSubTab('overlay')">Overlay</button>
+    </div>
+
+    <div class="layer-subpanel active" data-layersub="text">
     <div class="prop-group" style="padding-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="prop-title" style="margin:0">Text Layers</div>
@@ -556,7 +558,7 @@
     </div>
     </div>
 
-    <div class="insp-panel" data-insp="overlay">
+    <div class="layer-subpanel" data-layersub="overlay">
     <div class="prop-group" style="padding-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="prop-title" style="margin:0">Overlays</div>
@@ -605,6 +607,7 @@
         <button class="act-btn" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="importAssetToLibrary()">+ Import</button>
       </div>
       <div id="assetLibraryGrid" class="asset-grid"></div>
+    </div>
     </div>
     </div>
   </div>
