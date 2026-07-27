@@ -30,6 +30,7 @@ async function addImageLayer(){
     id: crypto.randomUUID(),
     path, url,
     start, end,
+    hidden: false,
     style: _defaultImageLayerStyle(),
   };
   S.imageLayers.push(layer);
@@ -71,6 +72,16 @@ function _selectedImageLayer(){
   return S.imageLayers.find(l=>l.id===S.selectedImageLayerId) || null;
 }
 
+// Eye toggle — see toggleTextLayerHidden() in textlayers.js for the full
+// rationale (not saveHistory()'d, skipped by both preview and export).
+function toggleImageLayerHidden(id){
+  const l = S.imageLayers.find(x=>x.id===id); if(!l) return;
+  l.hidden = !l.hidden;
+  renderTimeline();
+  updateImageLayerOverlays(video.currentTime||0);
+  renderLayerOutliner();
+}
+
 function syncImageLayerPos(axis,v){
   const l=_selectedImageLayer(); if(!l) return;
   v=parseFloat(v)||0;
@@ -90,7 +101,7 @@ function updateImageLayerOverlays(srcTime){
   if(!container) return;
   const activeIds = new Set();
   S.imageLayers.forEach(layer=>{
-    if(srcTime < layer.start || srcTime > layer.end) return;
+    if(layer.hidden || srcTime < layer.start || srcTime > layer.end) return;
     activeIds.add(layer.id);
     let el = document.getElementById('imagelayer-'+layer.id);
     if(!el){

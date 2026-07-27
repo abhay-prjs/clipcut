@@ -119,12 +119,17 @@ async function _doPywebviewExport(){
   // may currently hold real pre-snap gaps (gap-hatching), which would
   // desync burned-in caption timing from the actual export.
   const segMeta = S.segments.length ? gaplessSegmentMeta() : [];
+  // Eye-toggled-hidden layers are excluded entirely — hiding one is meant as
+  // a real hide (what does this look like without it), not just a preview
+  // setting that then silently reappears in the export.
+  const visibleTextLayers  = S.textLayers.filter(l=>!l.hidden);
+  const visibleImageLayers = S.imageLayers.filter(l=>!l.hidden);
   // "Add Text" layers and image/sticker overlays only reach the exported
   // video through the filter_complex path (ASS burn-in for text, ffmpeg
   // overlay compositing for images) — force it on when either exists, even
   // if the user never toggled Burn-in Captions, so neither silently
   // vanishes from the export.
-  const burnCap = _exportBurnCap || S.textLayers.length>0 || S.imageLayers.length>0;
+  const burnCap = _exportBurnCap || visibleTextLayers.length>0 || visibleImageLayers.length>0;
 
   _setExportUI('running');
   _setExportLabel('Opening save dialog…');
@@ -148,10 +153,10 @@ async function _doPywebviewExport(){
       burnCap ? JSON.stringify(S.textStyle) : '{}',
       burnCap ? (video.clientHeight||0) : 0,
       S.captionMode,
-      burnCap ? JSON.stringify(S.textLayers) : '[]',
+      burnCap ? JSON.stringify(visibleTextLayers) : '[]',
       // Flattened {path,start,end,posX,posY,posZ} — _make_filter_complex()
       // (serve.py) reads these fields directly, not nested under .style.
-      burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
+      burnCap ? JSON.stringify(visibleImageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
       _exportTransitionType,
       _exportTransitionDur,
       S.colorFilter

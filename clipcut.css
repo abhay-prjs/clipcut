@@ -161,6 +161,10 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',-apple-system,B
 .layer-outliner-row .layer-row-del{opacity:0;flex-shrink:0;color:var(--text3);font-size:11px;padding:2px 4px;border-radius:4px;}
 .layer-outliner-row:hover .layer-row-del{opacity:1;}
 .layer-outliner-row .layer-row-del:hover{color:var(--red);background:rgba(255,69,58,.14);}
+.layer-outliner-row .layer-row-eye{flex-shrink:0;font-size:11px;padding:2px 4px;border-radius:4px;opacity:.55;}
+.layer-outliner-row .layer-row-eye:hover{opacity:1;background:var(--s4);}
+.layer-outliner-row.row-hidden{opacity:.5;}
+.layer-outliner-row.row-hidden .layer-row-eye{opacity:1;}
 
 /* Magnetic alignment guides — center crosshair shown only while a drag is
    within snap range, exactly like every NLE's "snap to middle" line. */
@@ -380,6 +384,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .tl-imagelayer{position:absolute;top:3px;bottom:3px;background:var(--tl-img-fill);border:1px solid var(--tl-img-border);border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:650;color:#FFFFFF;white-space:nowrap;}
 .tl-imagelayer:hover{filter:brightness(1.12);}
 .tl-imagelayer.selected{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.5) inset;}
+
+/* Hidden-via-eye-toggle — dimmed + hatched so it reads as "off", not just
+   another block, matching the .tl-gap hatch pattern used for removed cuts. */
+.tl-layer-hidden{opacity:.4;background-image:repeating-linear-gradient(45deg, rgba(0,0,0,.25), rgba(0,0,0,.25) 5px, transparent 5px, transparent 10px) !important;}
 
 .tl-marquee{position:absolute;top:28px;height:86px;background:rgba(10,132,255,.1);border:1px solid rgba(10,132,255,.5);border-radius:4px;pointer-events:none;z-index:15;display:none;}
 

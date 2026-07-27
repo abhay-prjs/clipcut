@@ -31,6 +31,7 @@ function addTextLayer(){
     id: crypto.randomUUID(),
     text: 'Text',
     start, end,
+    hidden: false,
     style: _defaultTextLayerStyle(),
   };
   S.textLayers.push(layer);
@@ -70,6 +71,18 @@ function selectTextLayer(id){
 
 function _selectedTextLayer(){
   return S.textLayers.find(l=>l.id===S.selectedTextLayerId) || null;
+}
+
+// Eye toggle — quick "what does this look like without it" without deleting.
+// Not saveHistory()'d, same convention as the style setters below (only
+// add/delete are undo checkpoints); hidden layers are skipped by both the
+// preview overlay AND export, so it's a real hide, not just a view setting.
+function toggleTextLayerHidden(id){
+  const l = S.textLayers.find(x=>x.id===id); if(!l) return;
+  l.hidden = !l.hidden;
+  renderTimeline();
+  updateTextLayerOverlays(video.currentTime||0);
+  renderLayerOutliner();
 }
 
 function updateTextLayerContent(text){
@@ -147,7 +160,7 @@ function updateTextLayerOverlays(srcTime){
   if(!container) return;
   const activeIds = new Set();
   S.textLayers.forEach(layer=>{
-    if(srcTime < layer.start || srcTime > layer.end) return;
+    if(layer.hidden || srcTime < layer.start || srcTime > layer.end) return;
     activeIds.add(layer.id);
     let el = document.getElementById('textlayer-'+layer.id);
     if(!el){
@@ -321,8 +334,8 @@ function renderLayerOutliner(){
   const empty = document.getElementById('textLayerEmpty');
   if(!list) return;
   const rows = [
-    ...S.textLayers.map(l=>({kind:'text', id:l.id, label:l.text||'Text', start:l.start})),
-    ...S.imageLayers.map(l=>({kind:'image', id:l.id, label:(l.path||'').split(/[/\\]/).pop()||'Image', start:l.start})),
+    ...S.textLayers.map(l=>({kind:'text', id:l.id, label:l.text||'Text', start:l.start, hidden:!!l.hidden})),
+    ...S.imageLayers.map(l=>({kind:'image', id:l.id, label:(l.path||'').split(/[/\\]/).pop()||'Image', start:l.start, hidden:!!l.hidden})),
   ].sort((a,b)=>a.start-b.start);
 
   if(empty) empty.style.display = rows.length ? 'none' : '';
@@ -331,9 +344,10 @@ function renderLayerOutliner(){
     const selected = (r.kind==='text' && r.id===S.selectedTextLayerId) || (r.kind==='image' && r.id===S.selectedImageLayerId);
     const icon = r.kind==='text' ? 'Aa' : '🖼';
     const iconBg = r.kind==='text' ? 'var(--tl-text-fill)' : 'var(--tl-img-fill)';
-    return `<div class="layer-outliner-row${selected?' selected':''}" data-kind="${r.kind}" data-id="${r.id}">
+    return `<div class="layer-outliner-row${selected?' selected':''}${r.hidden?' row-hidden':''}" data-kind="${r.kind}" data-id="${r.id}">
       <span class="layer-row-icon" style="background:${iconBg}">${icon}</span>
       <span class="layer-row-name">${_escTx(r.label)}</span>
+      <span class="layer-row-eye" data-kind="${r.kind}" data-id="${r.id}" title="${r.hidden?'Show':'Hide'} (preview + export)">${r.hidden?'🙈':'👁'}</span>
       <span class="layer-row-del" data-kind="${r.kind}" data-id="${r.id}" title="Delete">✕</span>
     </div>`;
   }).join('');
@@ -342,6 +356,13 @@ function renderLayerOutliner(){
     row.addEventListener('click', ()=>{
       const {kind,id} = row.dataset;
       if(kind==='text') selectTextLayer(id); else selectImageLayer(id);
+    });
+  });
+  list.querySelectorAll('.layer-row-eye').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const {kind,id} = btn.dataset;
+      if(kind==='text') toggleTextLayerHidden(id); else toggleImageLayerHidden(id);
     });
   });
   list.querySelectorAll('.layer-row-del').forEach(btn=>{

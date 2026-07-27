@@ -115,10 +115,14 @@ async function runBatchExport(){
       const segs = S.segments.length
         ? S.segments.map(s => ({start: s.sourceStart, end: s.sourceEnd}))
         : [{start: S.trimIn||0, end: S.trimOut||S.duration}];
+      // Eye-toggled-hidden layers are excluded — see _doPywebviewExport() in
+      // export.js for the same filtering + rationale.
+      const visibleTextLayers  = S.textLayers.filter(l=>!l.hidden);
+      const visibleImageLayers = S.imageLayers.filter(l=>!l.hidden);
       // Forced on when text/image layers exist — same reasoning as
       // _doPywebviewExport(): both only reach the export through the
       // filter_complex path (ASS burn-in / ffmpeg overlay compositing).
-      const burnCap  = (typeof _exportBurnCap !== 'undefined' && _exportBurnCap) || S.textLayers.length>0 || S.imageLayers.length>0;
+      const burnCap  = (typeof _exportBurnCap !== 'undefined' && _exportBurnCap) || visibleTextLayers.length>0 || visibleImageLayers.length>0;
       const segMeta  = (burnCap && S.segments.length) ? gaplessSegmentMeta() : [];
 
       const result = await window.pywebview.api.export_video_batch_one(
@@ -136,8 +140,8 @@ async function runBatchExport(){
         burnCap ? JSON.stringify(S.textStyle) : '{}',
         burnCap ? (video.clientHeight||0) : 0,
         S.captionMode,
-        burnCap ? JSON.stringify(S.textLayers) : '[]',
-        burnCap ? JSON.stringify(S.imageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
+        burnCap ? JSON.stringify(visibleTextLayers) : '[]',
+        burnCap ? JSON.stringify(visibleImageLayers.map(l=>({path:l.path, start:l.start, end:l.end, posX:l.style.posX, posY:l.style.posY, posZ:l.style.posZ}))) : '[]',
         typeof _exportTransitionType !== 'undefined' ? _exportTransitionType : 'none',
         typeof _exportTransitionDur !== 'undefined' ? _exportTransitionDur : 0.5,
         S.colorFilter
