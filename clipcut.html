@@ -308,6 +308,7 @@
       <div class="insp-tab" data-insp="speed" onclick="switchInspTab('speed')">Speed</div>
       <div class="insp-tab" data-insp="captions" onclick="switchInspTab('captions')">Captions</div>
       <div class="insp-tab" data-insp="text" onclick="switchInspTab('text')">Text</div>
+      <div class="insp-tab" data-insp="overlay" onclick="switchInspTab('overlay')">Overlay</div>
     </div>
 
     <div class="insp-panel active" data-insp="video">
@@ -463,52 +464,15 @@
     <div class="insp-panel" data-insp="text">
     <div class="prop-group" style="padding-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="prop-title" style="margin:0">Layers</div>
-        <div style="display:flex;gap:5px">
-          <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addTextLayer()">+ Text</button>
-          <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addImageLayer()">+ Image</button>
-        </div>
+        <div class="prop-title" style="margin:0">Text Layers</div>
+        <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addTextLayer()">+ Text</button>
       </div>
-      <!-- Blender-outliner-style list: every text/image layer as one row, click
-           to select — expands its editor below instead of that being the only
-           way in/out of "something is selected" (the old shared-tab layout had
-           no way back to add a 2nd layer once one existed). -->
-      <div id="layerOutliner"></div>
+      <!-- Blender-outliner-style list: every text layer as one row, click to
+           select — expands its editor below. -->
+      <div id="textLayerOutliner"></div>
     </div>
     <div id="textLayerEmpty" class="prop-group" style="display:none">
-      <div class="empty-state" style="padding:10px 0">No text or image layers yet</div>
-    </div>
-    <div id="imageLayerEditor" style="display:none">
-      <div class="prop-group">
-        <div class="prop-title">Image</div>
-        <img id="imageLayerPreview" style="width:100%;max-height:120px;object-fit:contain;background:var(--s2);border:1px solid var(--b1);border-radius:6px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:8px">
-          <span>In: <span id="imageLayerStart">0.00s</span></span>
-          <span>Out: <span id="imageLayerEnd">0.00s</span></span>
-        </div>
-        <button class="act-btn" style="color:var(--red);font-size:9px" onclick="deleteImageLayer()">✕ Delete Image Layer</button>
-      </div>
-      <div class="prop-group">
-        <div class="prop-title">Position</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">X</span>
-          <input type="range" id="imageLayerPosX" min="0" max="100" value="50" step="1" style="flex:1" oninput="syncImageLayerPos('x',this.value)">
-          <input type="number" id="imageLayerPosXInput" min="-50" max="150" value="50" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('x',this.value)">
-          <span style="font-size:9px;color:var(--text2)">%</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Y</span>
-          <input type="range" id="imageLayerPosY" min="0" max="100" value="50" step="1" style="flex:1" oninput="syncImageLayerPos('y',this.value)">
-          <input type="number" id="imageLayerPosYInput" min="0" max="100" value="50" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('y',this.value)">
-          <span style="font-size:9px;color:var(--text2)">%</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Z</span>
-          <input type="range" id="imageLayerPosZ" min="0.1" max="3" value="1" step="0.05" style="flex:1" oninput="syncImageLayerPos('z',this.value)">
-          <input type="number" id="imageLayerPosZInput" min="0.05" max="10" value="1" step="0.05" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('z',this.value)">
-          <span style="font-size:9px;color:var(--text2)">×</span>
-        </div>
-      </div>
+      <div class="empty-state" style="padding:10px 0">No text layers yet</div>
     </div>
     <div id="textLayerEditor" style="display:none">
       <div class="prop-group">
@@ -588,6 +552,58 @@
           <span style="font-size:9px;color:var(--text2)">×</span>
         </div>
       </div>
+    </div>
+    </div>
+
+    <div class="insp-panel" data-insp="overlay">
+    <div class="prop-group" style="padding-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="prop-title" style="margin:0">Overlays</div>
+        <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addImageLayer()">+ Image</button>
+      </div>
+      <div id="imageLayerOutliner"></div>
+    </div>
+    <div id="imageLayerEmpty" class="prop-group" style="display:none">
+      <div class="empty-state" style="padding:10px 0">No image overlays yet</div>
+    </div>
+    <div id="imageLayerEditor" style="display:none">
+      <div class="prop-group">
+        <div class="prop-title">Image</div>
+        <img id="imageLayerPreview" style="width:100%;max-height:120px;object-fit:contain;background:var(--s2);border:1px solid var(--b1);border-radius:6px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:8px">
+          <span>In: <span id="imageLayerStart">0.00s</span></span>
+          <span>Out: <span id="imageLayerEnd">0.00s</span></span>
+        </div>
+        <button class="act-btn" style="color:var(--red);font-size:9px" onclick="deleteImageLayer()">✕ Delete Image Layer</button>
+      </div>
+      <div class="prop-group">
+        <div class="prop-title">Position</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">X</span>
+          <input type="range" id="imageLayerPosX" min="0" max="100" value="50" step="1" style="flex:1" oninput="syncImageLayerPos('x',this.value)">
+          <input type="number" id="imageLayerPosXInput" min="-50" max="150" value="50" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('x',this.value)">
+          <span style="font-size:9px;color:var(--text2)">%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Y</span>
+          <input type="range" id="imageLayerPosY" min="0" max="100" value="50" step="1" style="flex:1" oninput="syncImageLayerPos('y',this.value)">
+          <input type="number" id="imageLayerPosYInput" min="0" max="100" value="50" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('y',this.value)">
+          <span style="font-size:9px;color:var(--text2)">%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <span style="font-size:9px;color:var(--text3);width:10px;flex-shrink:0">Z</span>
+          <input type="range" id="imageLayerPosZ" min="0.1" max="3" value="1" step="0.05" style="flex:1" oninput="syncImageLayerPos('z',this.value)">
+          <input type="number" id="imageLayerPosZInput" min="0.05" max="10" value="1" step="0.05" class="api-key-input" style="width:46px;padding:3px 5px;height:22px" oninput="syncImageLayerPos('z',this.value)">
+          <span style="font-size:9px;color:var(--text2)">×</span>
+        </div>
+      </div>
+    </div>
+    <div class="prop-group" id="assetLibrarySection">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="prop-title" style="margin:0">Assets</div>
+        <button class="act-btn" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="importAssetToLibrary()">+ Import</button>
+      </div>
+      <div id="assetLibraryGrid" class="asset-grid"></div>
     </div>
     </div>
   </div>

@@ -770,6 +770,61 @@ class API:
         log('DIALOG', f'✓ found {len(paths)} video file(s)')
         return paths
 
+    # ── Per-video asset library ("working folder") ───────────────────────────
+    # Each source video gets a sibling folder — "myclip.mp4" -> "myclip_assets/"
+    # next to it — holding the image overlays used on that project. This is
+    # deliberately a plain OS folder (not something inside ClipCut's own
+    # install dir) so it's easy for the user to drop files into directly with
+    # Explorer too; ClipCut just also offers an in-app Import button that
+    # copies a picked file into it.
+    ASSET_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.webp')
+
+    def _assets_folder_path(self, source_path):
+        base, _ = os.path.splitext(source_path)
+        return base + '_assets'
+
+    def ensure_assets_folder(self, source_path):
+        """Create <video>_assets/ next to the source file if it doesn't
+        already exist. Returns its absolute path."""
+        folder = self._assets_folder_path(source_path)
+        os.makedirs(folder, exist_ok=True)
+        return folder
+
+    def list_assets(self, source_path):
+        """List image files in <video>_assets/ (creating it first if needed).
+        Returns absolute paths, sorted by filename."""
+        folder = self.ensure_assets_folder(source_path)
+        try:
+            entries = sorted(os.listdir(folder))
+        except OSError as e:
+            log('DIALOG', f'✕ list_assets failed: {e}')
+            return []
+        return [
+            os.path.join(folder, name) for name in entries
+            if name.lower().endswith(self.ASSET_EXTS) and os.path.isfile(os.path.join(folder, name))
+        ]
+
+    def import_asset(self, source_path, asset_file_path):
+        """Copy an already-picked image file into <video>_assets/ so the
+        project's assets are self-contained next to the video, not scattered
+        wherever the user originally had them. Returns the new absolute path,
+        or the original path unchanged if it's already inside the folder.
+        De-dupes filename collisions with a numeric suffix rather than
+        overwriting."""
+        folder = self.ensure_assets_folder(source_path)
+        if os.path.dirname(os.path.abspath(asset_file_path)) == os.path.abspath(folder):
+            return asset_file_path
+        name = os.path.basename(asset_file_path)
+        stem, ext = os.path.splitext(name)
+        dest = os.path.join(folder, name)
+        n = 1
+        while os.path.exists(dest):
+            dest = os.path.join(folder, f'{stem}_{n}{ext}')
+            n += 1
+        shutil.copy2(asset_file_path, dest)
+        log('DIALOG', f'✓ imported asset: {dest}')
+        return dest
+
     # ── Whisper transcription ─────────────────────────────────────────────────
 
     def probe_duration(self, source_path):

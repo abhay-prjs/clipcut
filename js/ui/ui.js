@@ -96,6 +96,7 @@ function switchTab(name){
 function switchInspTab(name){
   document.querySelectorAll('.insp-tab').forEach(t=>t.classList.toggle('active',t.dataset.insp===name));
   document.querySelectorAll('.insp-panel').forEach(p=>p.classList.toggle('active',p.dataset.insp===name));
+  if(name==='overlay') refreshAssetLibrary();
 }
 
 // ═══════════════════════════════════════

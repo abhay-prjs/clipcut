@@ -14,17 +14,12 @@ function _defaultImageLayerStyle(){
   return { posX: 50, posY: 50, posZ: 1 };
 }
 
-async function addImageLayer(){
-  if(!S.current){ toast('Load a video first'); return; }
-  if(!window.pywebview){ toast('Image overlays require the desktop app'); return; }
-  const path = await window.pywebview.api.pick_image();
-  if(!path) return;
-
+// Shared by both add paths (native picker, or clicking an Asset Library
+// thumbnail) so the actual layer-creation logic only lives in one place.
+function _createImageLayerAtPlayhead(path, url){
   const dur = S.duration || 10;
   const start = Math.min(video.currentTime||0, Math.max(0, dur-0.5));
   const end   = Math.min(start + 3, dur);
-  const url   = `${window.location.origin}/video?path=${encodeURIComponent(path)}`;
-
   saveHistory();
   const layer = {
     id: crypto.randomUUID(),
@@ -38,10 +33,86 @@ async function addImageLayer(){
   S.selectedTextLayerId = null;
   renderTimeline();
   updateImageLayerOverlays(video.currentTime||0);
-  switchInspTab('text'); // Image editor lives in the same "Text" tab area — see renderImageLayerInspector
+  switchInspTab('overlay');
   renderImageLayerInspector();
   renderTextLayerInspector();
-  toast('✓ Image added');
+}
+
+async function addImageLayer(){
+  if(!S.current){ toast('Load a video first'); return; }
+  if(!window.pywebview){ toast('Image overlays require the desktop app'); return; }
+  let path = await window.pywebview.api.pick_image();
+  if(!path) return;
+
+  // Copy the picked file into <video>_assets/ so the project's assets stay
+  // self-contained next to the source video instead of scattered wherever
+  // the user originally had it — see the Asset Library section below.
+  if(S.current.sourcePath){
+    try { path = await window.pywebview.api.import_asset(S.current.sourcePath, path); }
+    catch(e){ jlog('warn', `import_asset failed, using original path: ${e.message}`); }
+  }
+
+  const url = `${window.location.origin}/video?path=${encodeURIComponent(path)}`;
+  _createImageLayerAtPlayhead(path, url);
+  toast('✓ Image added — edit it in the Overlay tab');
+  refreshAssetLibrary();
+}
+
+function addImageLayerFromAsset(path){
+  if(!S.current){ toast('Load a video first'); return; }
+  const url = `${window.location.origin}/video?path=${encodeURIComponent(path)}`;
+  _createImageLayerAtPlayhead(path, url);
+  toast('✓ Added from asset library');
+}
+
+// ── Asset Library ("working folder") — every image previously used on this
+// video lives in a sibling <video>_assets/ folder (serve.py's
+// ensure_assets_folder/list_assets/import_asset); this grid shows it as
+// click-to-add thumbnails instead of native-picking the same sticker again
+// on every clip that reuses it. Lazy-loaded the same way _loadWhisperConfig-
+// FromServer() is — only fetched when the Overlay tab is actually opened. ──
+let _assetLibraryPaths = [];
+
+async function refreshAssetLibrary(){
+  const grid = document.getElementById('assetLibraryGrid');
+  if(!grid) return;
+  if(!S.current || !S.current.sourcePath || !window.pywebview){
+    _assetLibraryPaths = [];
+    grid.innerHTML = '<div class="empty-state" style="padding:8px 0;font-size:9.5px">Load a video first</div>';
+    return;
+  }
+  try { _assetLibraryPaths = await window.pywebview.api.list_assets(S.current.sourcePath); }
+  catch(e){ jlog('warn', `list_assets failed: ${e.message}`); _assetLibraryPaths = []; }
+
+  if(!_assetLibraryPaths.length){
+    grid.innerHTML = '<div class="empty-state" style="padding:8px 0;font-size:9.5px">No assets yet — Import one</div>';
+    return;
+  }
+  grid.innerHTML = _assetLibraryPaths.map((p,i)=>{
+    const url = `${window.location.origin}/video?path=${encodeURIComponent(p)}`;
+    const name = p.split(/[/\\]/).pop();
+    return `<div class="asset-thumb" data-idx="${i}" title="${_escTx(name)}">
+      <img src="${url}" loading="lazy">
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.asset-thumb').forEach(el=>{
+    el.addEventListener('click', ()=> addImageLayerFromAsset(_assetLibraryPaths[+el.dataset.idx]));
+  });
+}
+
+async function importAssetToLibrary(){
+  if(!S.current || !S.current.sourcePath){ toast('Load a video first'); return; }
+  if(!window.pywebview){ toast('Requires the desktop app'); return; }
+  const path = await window.pywebview.api.pick_image();
+  if(!path) return;
+  try {
+    await window.pywebview.api.import_asset(S.current.sourcePath, path);
+    toast('✓ Asset imported');
+    refreshAssetLibrary();
+  } catch(e){
+    jlog('error', `importAssetToLibrary: import_asset failed: ${e.message}`);
+    toast('✕ Import failed');
+  }
 }
 
 function deleteImageLayer(id){
@@ -59,9 +130,9 @@ function deleteImageLayer(id){
 
 function selectImageLayer(id){
   S.selectedImageLayerId = id;
-  S.selectedTextLayerId = null; // mutually exclusive — the Text tab shows one editor at a time
+  S.selectedTextLayerId = null; // separate tabs now, but keep selection state mutually exclusive
   document.querySelectorAll('.tl-imagelayer').forEach(el=>el.classList.toggle('selected', el.dataset.imgId===id));
-  switchInspTab('text');
+  switchInspTab('overlay');
   renderImageLayerInspector();
   renderTextLayerInspector();
   const layer = S.imageLayers.find(l=>l.id===id);

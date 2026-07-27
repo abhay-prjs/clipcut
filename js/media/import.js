@@ -222,5 +222,8 @@ function selectClip(id) {
   renderTimeline();
   renderTextLayerInspector();
   renderImageLayerInspector();
+  // Each clip has its own <video>_assets/ working folder — refresh so the
+  // grid doesn't keep showing the previous clip's assets after switching.
+  if(document.getElementById('assetLibraryGrid')) refreshAssetLibrary();
   _applyColorFilterPreview();
 }

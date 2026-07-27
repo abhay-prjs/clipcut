@@ -60,7 +60,7 @@ function deleteTextLayer(id){
 
 function selectTextLayer(id){
   S.selectedTextLayerId = id;
-  S.selectedImageLayerId = null; // mutually exclusive — the Text tab shows one editor at a time
+  S.selectedImageLayerId = null; // separate tabs now, but keep selection state mutually exclusive
   document.querySelectorAll('.tl-textlayer').forEach(el=>el.classList.toggle('selected', el.dataset.textId===id));
   switchInspTab('text');
   renderTextLayerInspector();
@@ -323,49 +323,39 @@ function _hideLayerGuides(){
 }
 
 // ── Inspector panel sync ────────────────────────────────────────────────
-// Blender-outliner-style list: every text/image layer as one row (icon +
-// name), click to select — that selection is what drives which editor block
-// (renderTextLayerInspector/renderImageLayerInspector) shows below. This is
-// the fix for "no way to add a 2nd layer" — the old empty-state-only Add
-// buttons disappeared the moment anything was selected; the outliner and its
-// header Add buttons are always visible regardless of selection.
-function renderLayerOutliner(){
-  const list = document.getElementById('layerOutliner');
-  const empty = document.getElementById('textLayerEmpty');
-  if(!list) return;
-  const rows = [
-    ...S.textLayers.map(l=>({kind:'text', id:l.id, label:l.text||'Text', start:l.start, hidden:!!l.hidden})),
-    ...S.imageLayers.map(l=>({kind:'image', id:l.id, label:(l.path||'').split(/[/\\]/).pop()||'Image', start:l.start, hidden:!!l.hidden})),
-  ].sort((a,b)=>a.start-b.start);
-
-  if(empty) empty.style.display = rows.length ? 'none' : '';
-
-  list.innerHTML = rows.map(r=>{
-    const selected = (r.kind==='text' && r.id===S.selectedTextLayerId) || (r.kind==='image' && r.id===S.selectedImageLayerId);
-    const icon = r.kind==='text' ? 'Aa' : '🖼';
-    const iconBg = r.kind==='text' ? 'var(--tl-text-fill)' : 'var(--tl-img-fill)';
-    return `<div class="layer-outliner-row${selected?' selected':''}${r.hidden?' row-hidden':''}" data-kind="${r.kind}" data-id="${r.id}">
+// Blender-outliner-style list — text layers get their own list in the Text
+// tab, image/overlay layers get their own list in the Overlay tab (they used
+// to share one tab entirely, which was the actual bug: nobody thinks to open
+// "Text" to add a sticker). Click a row to select it, which expands its
+// editor below and switches to that layer's own tab if it wasn't already.
+function _layerRowHtml(kind, l){
+  const selected = kind==='text' ? l.id===S.selectedTextLayerId : l.id===S.selectedImageLayerId;
+  const label = kind==='text' ? (l.text||'Text') : ((l.path||'').split(/[/\\]/).pop()||'Image');
+  const icon = kind==='text' ? 'Aa' : '🖼';
+  const iconBg = kind==='text' ? 'var(--tl-text-fill)' : 'var(--tl-img-fill)';
+  return `<div class="layer-outliner-row${selected?' selected':''}${l.hidden?' row-hidden':''}" data-kind="${kind}" data-id="${l.id}">
       <span class="layer-row-icon" style="background:${iconBg}">${icon}</span>
-      <span class="layer-row-name">${_escTx(r.label)}</span>
-      <span class="layer-row-eye" data-kind="${r.kind}" data-id="${r.id}" title="${r.hidden?'Show':'Hide'} (preview + export)">${r.hidden?'🙈':'👁'}</span>
-      <span class="layer-row-del" data-kind="${r.kind}" data-id="${r.id}" title="Delete">✕</span>
+      <span class="layer-row-name">${_escTx(label)}</span>
+      <span class="layer-row-eye" data-kind="${kind}" data-id="${l.id}" title="${l.hidden?'Show':'Hide'} (preview + export)">${l.hidden?'🙈':'👁'}</span>
+      <span class="layer-row-del" data-kind="${kind}" data-id="${l.id}" title="Delete">✕</span>
     </div>`;
-  }).join('');
+}
 
-  list.querySelectorAll('.layer-outliner-row').forEach(row=>{
+function _bindOutlinerRows(container){
+  container.querySelectorAll('.layer-outliner-row').forEach(row=>{
     row.addEventListener('click', ()=>{
       const {kind,id} = row.dataset;
       if(kind==='text') selectTextLayer(id); else selectImageLayer(id);
     });
   });
-  list.querySelectorAll('.layer-row-eye').forEach(btn=>{
+  container.querySelectorAll('.layer-row-eye').forEach(btn=>{
     btn.addEventListener('click', e=>{
       e.stopPropagation();
       const {kind,id} = btn.dataset;
       if(kind==='text') toggleTextLayerHidden(id); else toggleImageLayerHidden(id);
     });
   });
-  list.querySelectorAll('.layer-row-del').forEach(btn=>{
+  container.querySelectorAll('.layer-row-del').forEach(btn=>{
     btn.addEventListener('click', e=>{
       e.stopPropagation();
       const {kind,id} = btn.dataset;
@@ -374,9 +364,27 @@ function renderLayerOutliner(){
   });
 }
 
+function renderLayerOutliner(){
+  const textList = document.getElementById('textLayerOutliner');
+  const imageList = document.getElementById('imageLayerOutliner');
+  const textEmpty = document.getElementById('textLayerEmpty');
+  const imageEmpty = document.getElementById('imageLayerEmpty');
+
+  if(textList){
+    if(textEmpty) textEmpty.style.display = S.textLayers.length ? 'none' : '';
+    textList.innerHTML = S.textLayers.slice().sort((a,b)=>a.start-b.start).map(l=>_layerRowHtml('text', l)).join('');
+    _bindOutlinerRows(textList);
+  }
+  if(imageList){
+    if(imageEmpty) imageEmpty.style.display = S.imageLayers.length ? 'none' : '';
+    imageList.innerHTML = S.imageLayers.slice().sort((a,b)=>a.start-b.start).map(l=>_layerRowHtml('image', l)).join('');
+    _bindOutlinerRows(imageList);
+  }
+}
+
 // Kept as an alias — every existing call site (add/delete/select/undo across
 // textlayers.js/imagelayers.js/history.js/import.js/trim.js) calls this name;
-// the outliner list is now what actually needs refreshing on those events.
+// the outliner lists are now what actually need refreshing on those events.
 function _updateLayersEmptyState(){
   renderLayerOutliner();
 }

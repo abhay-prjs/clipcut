@@ -166,6 +166,14 @@ body{background:var(--bg);color:var(--text);font-family:'Outfit',-apple-system,B
 .layer-outliner-row.row-hidden{opacity:.5;}
 .layer-outliner-row.row-hidden .layer-row-eye{opacity:1;}
 
+/* Asset library — per-video working folder of reusable image overlays,
+   shown as click-to-add thumbnails instead of native-picking the same file
+   again on every clip that reuses it. */
+.asset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.asset-thumb{aspect-ratio:1;background:var(--s2);border:1px solid var(--b1);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .12s;}
+.asset-thumb:hover{border-color:var(--blue-soft);}
+.asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+
 /* Magnetic alignment guides — center crosshair shown only while a drag is
    within snap range, exactly like every NLE's "snap to middle" line. */
 .layer-guide{position:absolute;background:var(--blue-soft);pointer-events:none;z-index:5;display:none;box-shadow:0 0 4px rgba(64,156,255,.8);}
