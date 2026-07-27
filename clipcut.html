@@ -36,6 +36,7 @@
   <div class="timecode" id="timecodeDisplay">00:00:00</div>
   <button class="icon-btn ai-btn" onclick="toggleChatPanel()" id="chatToggleBtn" title="AI Chat">✦</button>
   <button class="icon-btn" onclick="switchTab('settings')" title="Detection & pipeline settings">⚙</button>
+  <button class="act-btn" id="queueBadgeBtn" style="margin:0;width:auto;padding:6px 12px;font-size:11px" onclick="openQueueModal()" title="Render queue — set up each clip's export, then render them all at once">🎬 Queue</button>
   <button class="export-btn" onclick="openExportModal()">⬆ Export</button>
 </div>
 
@@ -1048,7 +1049,33 @@
     </div>
     <div class="modal-footer">
       <button id="exportCancelBtn" class="act-btn" style="margin:0;width:auto;padding:7px 14px" onclick="cancelExport()">Cancel</button>
+      <button id="exportQueueBtn" class="act-btn" style="margin:0;width:auto;padding:7px 16px" onclick="addExportToQueue()" title="Capture this clip's current settings as one job — tweak the next clip, add it too, then Render Queue when everything's set up">+ Add to Queue</button>
       <button id="exportStartBtn"  class="act-btn primary" style="margin:0;width:auto;padding:7px 22px" onclick="startExport()">⬇ Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- RENDER QUEUE MODAL (Adobe Media Encoder style) — jobs are captured
+     snapshots (segments/captions/layers/export settings all frozen at
+     Add-to-Queue time), not live state, so tweaking clip B after queueing
+     clip A can't retroactively change A's job. -->
+<div class="modal-backdrop" id="queueModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span class="modal-title">🎬 Render Queue</span>
+      <button class="modal-close" onclick="closeModal('queueModal')">✕</button>
+    </div>
+    <div class="modal-body" id="queueModalBody">
+      <div id="queueList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+      <div id="queueEmpty" class="empty-state" style="padding:20px 0;display:none">
+        Nothing queued yet.<br>
+        <span style="font-size:10px;color:var(--text3)">Open Export on a clip, tweak its settings, then "+ Add to Queue".</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="act-btn" style="margin:0;width:auto;padding:7px 14px" onclick="clearRenderQueue()">Clear</button>
+      <button id="queueCancelBtn" class="act-btn" style="margin:0;width:auto;padding:7px 14px" disabled onclick="cancelRenderQueue()">Cancel</button>
+      <button id="queueRenderBtn" class="act-btn primary" style="margin:0;width:auto;padding:7px 18px" onclick="renderQueueAll()">▶ Render Queue</button>
     </div>
   </div>
 </div>
@@ -1114,6 +1141,7 @@
 <script src="js/detection/ai.js"></script>
 <script src="js/media/import.js"></script>
 <script src="js/media/export.js"></script>
+<script src="js/media/queue.js"></script>
 <script src="js/media/batch.js"></script>
 <script src="js/playback/playback.js"></script>
 <script src="js/timeline/trim.js"></script>

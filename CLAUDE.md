@@ -81,6 +81,7 @@ docs/backups predating the 2026-07-26 rename may still say otherwise).
     ├── media/
     │   ├── import.js       # loadClip(), selectClip(), loadClipFromPath(), openFileNative()
     │   ├── export.js       # startExport(), _doPywebviewExport(), _doWebMExport(), exportFrame()
+    │   ├── queue.js        # Render Queue — addExportToQueue(), renderQueueAll() (Adobe Media Encoder style)
     │   └── batch.js        # Batch export / "Process All" (Part F3)
     ├── playback/
     │   └── playback.js     # togglePlay(), rVFC loop, buildPlaySegments(), getPlayheadPosition(), sourceTimeToTimeline(), tc(), fmt(), clamp()
@@ -112,6 +113,7 @@ js/detection/linter.js
 js/detection/ai.js
 js/media/import.js
 js/media/export.js
+js/media/queue.js
 js/media/batch.js
 js/playback/playback.js
 js/timeline/trim.js
@@ -513,6 +515,14 @@ is currently showing gap-hatched cuts pre-snap.
 - `cancelBatch()` — sets a flag checked between clips (not mid-encode) — the current clip's export still finishes
 - `_batchOutputName(clip, templateName)` — `{clipName}_{template|'clipcut'}_{date}.mp4`, sanitized
 - **Known gaps:** no per-clip template override (one template applies to the whole batch run); `selectClip()` swap is followed by a fixed `setTimeout(300ms)` rather than an awaited completion signal — consistent with `runAutoMode()`'s existing style of fixed waits between steps, not new fragility introduced here; not runtime-verified end-to-end for the same reason as the proxy render and templates work (no way to launch the actual pywebview GUI in this environment)
+
+**js/media/queue.js — Render Queue (Adobe Media Encoder style)**
+- Different model from `batch.js` above on purpose: Process All runs Auto/Deep Mode unattended across every checked clip (no per-clip tweaking); the queue instead captures ONE clip's *already-tweaked* state (cuts applied, captions edited, layers placed, export settings chosen) as a frozen job, so retakes/overlay-nudges/caption-splits that Auto Mode can't get right on its own are already baked in before it's queued
+- `addExportToQueue()` — the Export modal's "+ Add to Queue" button. Reads the same `_export*` globals (`_exportPreset`/`_exportBurnCap`/`_exportTransitionType`/etc.) and builds the exact same param set `_doPywebviewExport()` (export.js) would send, but JSON-round-trips everything (segments, captions, textLayers, imageLayers, textStyle) into a plain job object pushed onto `_renderQueue` instead of sending it immediately — a real frozen copy, not a reference into `S`, so editing the next clip can't retroactively mutate an already-queued job
+- `openQueueModal()` / `renderQueueList()` — `#queueModal`, opened via the topbar's `🎬 Queue` badge button (`_updateQueueBadge()` keeps its `(N)` count in sync). Each row shows clip name + a settings summary (`_queueSummary()`) + live status + a remove ✕
+- `renderQueueAll()` — `pick_folder()` once (same "one folder, not N dialogs" reasoning as `runBatchExport()`), then sequentially calls `pywebview.api.export_video_batch_one()` per job using that job's own frozen params, updating `_setQueueJobStatus()` live. `cancelRenderQueue()` sets a flag checked between jobs, same granularity as `cancelBatch()`
+- `removeFromQueue(id)` / `clearRenderQueue()` — both refuse while `_queueRunning` (mutating the array mid-loop would desync the `for...of` iteration)
+- **Known gap:** no queue persistence across app restarts (in-memory `_renderQueue` only) — not runtime-verified for the same reason as batch.js above
 
 **js/playback/playback.js**
 - `togglePlay()`, `skipTime()`, `setSpeed()`, `setVolume()` — all branch on `S.proxyActive` early (proxy has no gaps to route skip/restart logic around)
