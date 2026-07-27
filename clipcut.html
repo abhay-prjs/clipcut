@@ -461,14 +461,22 @@
     </div>
 
     <div class="insp-panel" data-insp="text">
-    <div id="textLayerEmpty" class="prop-group">
-      <div class="prop-title">Text &amp; Image Layers</div>
-      <div class="empty-state" style="padding:14px 0">Nothing selected<br>
-        <div style="display:flex;gap:6px;justify-content:center;margin-top:10px">
-          <button class="act-btn primary" style="width:auto;padding:5px 14px" onclick="addTextLayer()">+ Add Text</button>
-          <button class="act-btn primary" style="width:auto;padding:5px 14px" onclick="addImageLayer()">+ Add Image</button>
+    <div class="prop-group" style="padding-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="prop-title" style="margin:0">Layers</div>
+        <div style="display:flex;gap:5px">
+          <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addTextLayer()">+ Text</button>
+          <button class="act-btn primary" style="margin:0;width:auto;padding:4px 10px;font-size:9.5px" onclick="addImageLayer()">+ Image</button>
         </div>
       </div>
+      <!-- Blender-outliner-style list: every text/image layer as one row, click
+           to select — expands its editor below instead of that being the only
+           way in/out of "something is selected" (the old shared-tab layout had
+           no way back to add a 2nd layer once one existed). -->
+      <div id="layerOutliner"></div>
+    </div>
+    <div id="textLayerEmpty" class="prop-group" style="display:none">
+      <div class="empty-state" style="padding:10px 0">No text or image layers yet</div>
     </div>
     <div id="imageLayerEditor" style="display:none">
       <div class="prop-group">

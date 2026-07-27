@@ -310,12 +310,54 @@ function _hideLayerGuides(){
 }
 
 // ── Inspector panel sync ────────────────────────────────────────────────
-// Shared empty-state block (both text and image layer editors live in the
-// same "Text" inspector tab) — visible only when neither kind is selected.
-function _updateLayersEmptyState(){
+// Blender-outliner-style list: every text/image layer as one row (icon +
+// name), click to select — that selection is what drives which editor block
+// (renderTextLayerInspector/renderImageLayerInspector) shows below. This is
+// the fix for "no way to add a 2nd layer" — the old empty-state-only Add
+// buttons disappeared the moment anything was selected; the outliner and its
+// header Add buttons are always visible regardless of selection.
+function renderLayerOutliner(){
+  const list = document.getElementById('layerOutliner');
   const empty = document.getElementById('textLayerEmpty');
-  if(!empty) return;
-  empty.style.display = (_selectedTextLayer() || _selectedImageLayer()) ? 'none' : '';
+  if(!list) return;
+  const rows = [
+    ...S.textLayers.map(l=>({kind:'text', id:l.id, label:l.text||'Text', start:l.start})),
+    ...S.imageLayers.map(l=>({kind:'image', id:l.id, label:(l.path||'').split(/[/\\]/).pop()||'Image', start:l.start})),
+  ].sort((a,b)=>a.start-b.start);
+
+  if(empty) empty.style.display = rows.length ? 'none' : '';
+
+  list.innerHTML = rows.map(r=>{
+    const selected = (r.kind==='text' && r.id===S.selectedTextLayerId) || (r.kind==='image' && r.id===S.selectedImageLayerId);
+    const icon = r.kind==='text' ? 'Aa' : '🖼';
+    const iconBg = r.kind==='text' ? 'var(--tl-text-fill)' : 'var(--tl-img-fill)';
+    return `<div class="layer-outliner-row${selected?' selected':''}" data-kind="${r.kind}" data-id="${r.id}">
+      <span class="layer-row-icon" style="background:${iconBg}">${icon}</span>
+      <span class="layer-row-name">${_escTx(r.label)}</span>
+      <span class="layer-row-del" data-kind="${r.kind}" data-id="${r.id}" title="Delete">✕</span>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.layer-outliner-row').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const {kind,id} = row.dataset;
+      if(kind==='text') selectTextLayer(id); else selectImageLayer(id);
+    });
+  });
+  list.querySelectorAll('.layer-row-del').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const {kind,id} = btn.dataset;
+      if(kind==='text') deleteTextLayer(id); else deleteImageLayer(id);
+    });
+  });
+}
+
+// Kept as an alias — every existing call site (add/delete/select/undo across
+// textlayers.js/imagelayers.js/history.js/import.js/trim.js) calls this name;
+// the outliner list is now what actually needs refreshing on those events.
+function _updateLayersEmptyState(){
+  renderLayerOutliner();
 }
 
 function renderTextLayerInspector(){
