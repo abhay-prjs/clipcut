@@ -94,11 +94,21 @@ function updateImageLayerOverlays(srcTime){
     activeIds.add(layer.id);
     let el = document.getElementById('imagelayer-'+layer.id);
     if(!el){
-      el = document.createElement('img');
+      // A wrapper div (not the <img> itself) so a resize-handle child can
+      // sit alongside the image — an <img> can't have DOM children.
+      el = document.createElement('div');
       el.id = 'imagelayer-'+layer.id;
       el.className = 'image-layer-overlay';
-      el.src = layer.url;
+      const img = document.createElement('img');
+      img.src = layer.url;
+      img.draggable = false;
+      el.appendChild(img);
+      const handle = document.createElement('div');
+      handle.className = 'layer-resize-handle';
+      el.appendChild(handle);
       el.onclick = (e)=>{ e.stopPropagation(); selectImageLayer(layer.id); };
+      _bindLayerOverlayDrag(el, layer.id, 'image');
+      _bindLayerScaleHandle(handle, layer.id, 'image');
       container.appendChild(el);
     }
     const st = layer.style;

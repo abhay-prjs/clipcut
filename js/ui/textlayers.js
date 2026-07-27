@@ -7,9 +7,11 @@
 // style the way captions do, since these are meant to be independent
 // on-screen objects (title card, callout, etc.), not one running transcript.
 //
-// v1 scope: position via numeric X/Y/Z sliders in the Text inspector tab
-// (same pattern captions already use), not drag-in-preview — that's a
-// separate, not-yet-built feature (see CLAUDE.md Pending Features).
+// Position/scale can be set two ways, kept in sync: numeric X/Y/Z sliders
+// in the Text inspector tab, or dragging the layer/its corner handle
+// directly on the preview (see _bindLayerOverlayDrag/_bindLayerScaleHandle
+// below) — the on-canvas drag snaps to 0/50/100 on each axis (magnet, not a
+// hard grid), overridable by holding Alt for fully free placement.
 
 function _defaultTextLayerStyle(){
   return {
@@ -152,11 +154,21 @@ function updateTextLayerOverlays(srcTime){
       el = document.createElement('div');
       el.id = 'textlayer-'+layer.id;
       el.className = 'text-layer-overlay';
+      // Label lives in its own span — el.textContent would wipe the resize
+      // handle child every update, so only the span's text ever gets replaced.
+      const span = document.createElement('span');
+      span.className = 'tlo-text';
+      el.appendChild(span);
+      const handle = document.createElement('div');
+      handle.className = 'layer-resize-handle';
+      el.appendChild(handle);
       el.onclick = (e)=>{ e.stopPropagation(); selectTextLayer(layer.id); };
+      _bindLayerOverlayDrag(el, layer.id, 'text');
+      _bindLayerScaleHandle(handle, layer.id, 'text');
       container.appendChild(el);
     }
     const st = layer.style;
-    el.textContent = layer.text;
+    el.querySelector('.tlo-text').textContent = layer.text;
     el.style.fontSize = st.fontSize+'px';
     el.style.fontFamily = st.fontFamily;
     el.style.fontWeight = st.fontWeight;
@@ -177,6 +189,124 @@ function updateTextLayerOverlays(srcTime){
     if(!allIds.has(id)){ el.remove(); return; }
     el.style.display = activeIds.has(id) ? 'block' : 'none';
   });
+}
+
+// ── Direct on-canvas manipulation — drag to move, corner handle to scale,
+// magnetic snap-to-middle. Shared between text and image layers (kind:
+// 'text'|'image') since the only difference is which S.*Layers array/setter
+// they touch; the drag/snap math itself is identical. Always looks the
+// layer up FRESH by id inside handlers rather than closing over the layer
+// object — undo/redo replaces S.textLayers/S.imageLayers wholesale via a
+// JSON round-trip, so a captured object reference would go stale (same id,
+// different object) the moment the user undoes anything mid-session. ─────
+function _layerKindAPI(kind){
+  return kind==='text'
+    ? { list:()=>S.textLayers, select:selectTextLayer, update:updateTextLayerOverlays, renderInsp:renderTextLayerInspector }
+    : { list:()=>S.imageLayers, select:selectImageLayer, update:updateImageLayerOverlays, renderInsp:renderImageLayerInspector };
+}
+
+function _bindLayerOverlayDrag(el, layerId, kind){
+  const api = _layerKindAPI(kind);
+  const container = document.getElementById('videoContainer');
+  let dragging=false, startX=0, startY=0, startPosX=0, startPosY=0, historySaved=false;
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==0 || e.target.classList.contains('layer-resize-handle')) return;
+    e.stopPropagation();
+    const l = api.list().find(x=>x.id===layerId); if(!l) return;
+    api.select(layerId);
+    dragging=true; historySaved=false;
+    startX=e.clientX; startY=e.clientY;
+    startPosX=l.style.posX; startPosY=l.style.posY;
+    el.setPointerCapture(e.pointerId);
+  });
+
+  el.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const l = api.list().find(x=>x.id===layerId); if(!l) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    const rect = container.getBoundingClientRect();
+    let x = startPosX + (e.clientX-startX)/rect.width*100;
+    let y = startPosY + (e.clientY-startY)/rect.height*100;
+    x = Math.max(0, Math.min(100, x));
+    y = Math.max(0, Math.min(100, y));
+    const snapped = _applyLayerSnap(x, y, e.altKey);
+    l.style.posX = snapped.x; l.style.posY = snapped.y;
+    api.update(video.currentTime||0);
+    api.renderInsp();
+  });
+
+  el.addEventListener('pointerup', e=>{
+    if(!dragging) return;
+    dragging=false;
+    _hideLayerGuides();
+    el.releasePointerCapture(e.pointerId);
+  });
+}
+
+function _bindLayerScaleHandle(handle, layerId, kind){
+  const api = _layerKindAPI(kind);
+  let dragging=false, startDist=1, startPosZ=1, historySaved=false;
+
+  handle.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.stopPropagation();
+    const l = api.list().find(x=>x.id===layerId); if(!l) return;
+    dragging=true; historySaved=false;
+    const rect = handle.parentElement.getBoundingClientRect();
+    const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+    startDist = Math.hypot(e.clientX-cx, e.clientY-cy) || 1;
+    startPosZ = l.style.posZ;
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const l = api.list().find(x=>x.id===layerId); if(!l) return;
+    if(!historySaved){ saveHistory(); historySaved=true; }
+    const rect = handle.parentElement.getBoundingClientRect();
+    const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+    const dist = Math.hypot(e.clientX-cx, e.clientY-cy) || 1;
+    let scale = startPosZ * (dist/startDist);
+    scale = Math.max(0.2, Math.min(5, Math.round(scale*100)/100));
+    l.style.posZ = scale;
+    api.update(video.currentTime||0);
+    api.renderInsp();
+  });
+
+  handle.addEventListener('pointerup', e=>{
+    dragging=false;
+    handle.releasePointerCapture(e.pointerId);
+  });
+}
+
+// Magnetic snap — pulls to 0/50/100 (edge/middle/edge) on each axis
+// independently within a small threshold, like a magnet rather than a hard
+// grid: close to the middle, it grabs; anywhere else, it leaves the value
+// alone. Holding Alt bypasses it entirely for fully free placement.
+function _applyLayerSnap(x, y, altKey){
+  if(altKey){ _hideLayerGuides(); return {x,y}; }
+  const T = 3; // percentage-point magnet radius
+  const targets = [0,50,100];
+  let sx=x, sy=y, snappedX=null, snappedY=null;
+  for(const t of targets){ if(Math.abs(x-t)<=T){ sx=t; snappedX=t; break; } }
+  for(const t of targets){ if(Math.abs(y-t)<=T){ sy=t; snappedY=t; break; } }
+  _showLayerGuides(snappedX, snappedY);
+  return {x:sx, y:sy};
+}
+
+function _showLayerGuides(xPct, yPct){
+  const gv=document.getElementById('layerGuideV'), gh=document.getElementById('layerGuideH');
+  if(gv) gv.style.display = xPct===null ? 'none' : 'block';
+  if(gv && xPct!==null) gv.style.left = xPct+'%';
+  if(gh) gh.style.display = yPct===null ? 'none' : 'block';
+  if(gh && yPct!==null) gh.style.top = yPct+'%';
+}
+
+function _hideLayerGuides(){
+  const gv=document.getElementById('layerGuideV'), gh=document.getElementById('layerGuideH');
+  if(gv) gv.style.display='none';
+  if(gh) gh.style.display='none';
 }
 
 // ── Inspector panel sync ────────────────────────────────────────────────
